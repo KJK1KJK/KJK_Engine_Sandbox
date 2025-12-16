@@ -1,14 +1,23 @@
+#include <KJK>
+
 #include <iostream>
 
-int main(int argc, char* argv[])
+class SandboxApp : public KJK::Application
 {
-	//Main game Loop
-	bool quit = false;
-	while (!quit)
+public:
+	SandboxApp()
 	{
-		std::cout << "Hello, Sandbox!" << std::endl;
-		system("cls");
+
 	}
 
-	return 0;
+	~SandboxApp()
+	{
+
+	}
+};
+
+
+KJK::Application* KJK::CreateApplication()
+{
+	return new SandboxApp();
 }

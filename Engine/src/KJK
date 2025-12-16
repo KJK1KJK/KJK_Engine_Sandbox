@@ -1,0 +1,15 @@
+#pragma once
+
+//File that defines the includes and versioning for the KJK engine.
+//Used by applications that use the engine.
+
+#include <KJK_Engine/Application.h> //Application definition
+#include <KJK_Engine/EntryPoint.h> //Entry Point into the application
+
+
+//Constants definition
+namespace KJK
+{
+    const int VERSION_MAJOR = 0;
+    const int VERSION_MINOR = 1;
+}
