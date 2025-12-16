@@ -1,0 +1,21 @@
+{
+  "name": "kjk-engine-sandbox",
+  "version": "0.1.0",
+  "dependencies": [
+    "sdl3",
+    "entt",
+    "box2d",
+    "glm",
+    "cpr",
+    "onnxruntime",
+    "glad",
+    {
+      "name": "imgui",
+      "features": [ "docking-experimental", "sdl3-binding", "opengl3-binding" ]
+    },
+    {
+      "name": "opengl",
+      "platform": "windows"
+    }
+  ]
+}
