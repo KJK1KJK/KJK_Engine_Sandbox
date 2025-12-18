@@ -7,6 +7,7 @@
     "box2d",
     "glm",
     "cpr",
+    "enet",
     "onnxruntime",
     "glad",
     {

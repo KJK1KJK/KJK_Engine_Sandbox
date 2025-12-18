@@ -1,5 +1,7 @@
 #pragma once
 
+//File allowing entry to the game engine from outside
+
 #ifdef KJK_PLATFORM_WINDOWS
 
 #include "KJK_Engine/Application.h"

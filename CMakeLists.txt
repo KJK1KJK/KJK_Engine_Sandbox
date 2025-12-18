@@ -32,6 +32,7 @@ find_package(imgui CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(onnxruntime CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
+find_package(unofficial-enet CONFIG REQUIRED)
 
 #Add subdirectories for Engine and Sandbox
 add_subdirectory(Engine)

@@ -21,4 +21,5 @@ target_link_libraries(Engine PUBLIC
     glad::glad
     onnxruntime::onnxruntime
     cpr::cpr
+    unofficial::enet::enet
 )
