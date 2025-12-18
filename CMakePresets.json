@@ -39,6 +39,22 @@
             }
         },
         {
+            "name": "x64-dist",
+            "displayName": "x64 Dist",
+            "inherits": "x64-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "x64-minsize",
+            "displayName": "x64 MinSizeRel",
+            "inherits": "x64-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
+            }
+        },
+        {
             "name": "x86-debug",
             "displayName": "x86 Debug",
             "inherits": "windows-base",
@@ -56,6 +72,22 @@
             "inherits": "x86-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "x86-dist",
+            "displayName": "x86 Dist",
+            "inherits": "x86-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "x86-minsize",
+            "displayName": "x86 MinSizeRel",
+            "inherits": "x86-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
             }
         },
         {
@@ -79,6 +111,30 @@
             }
         },
         {
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "inherits": "linux-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux-dist",
+            "displayName": "Linux Dist",
+            "inherits": "linux-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "linux-minsize",
+            "displayName": "Linux MinSizeRel",
+            "inherits": "linux-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
+            }
+        },
+        {
             "name": "macos-debug",
             "displayName": "macOS Debug",
             "generator": "Ninja",
@@ -92,10 +148,34 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Darwin"
             },
-            "vendor": {
-                "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
-                    "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
-                }
+          "vendor": {
+            "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+              "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
+            }
+          }
+        },
+        {
+          "name": "macos-release",
+          "displayName": "macOS Release",
+          "inherits": "macos-debug",
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Release"
+          }
+        },
+        {
+          "name": "macos-dist",
+          "displayName": "macOS Dist",
+          "inherits": "macos-release",
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+          }
+        },
+        {
+            "name": "macos-minsize",
+            "displayName": "macOS MinSizeRel",
+            "inherits": "macos-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
             }
         }
     ]

@@ -22,7 +22,20 @@ namespace KJK
 	};
 }
 
-#ifdef KJK_ENABLE_LOGS
+#ifdef KJK_MINSIZE
+	//Core logger macros
+	#define KJK_CORE_CRITICAL(...)
+	#define KJK_CORE_ERROR(...)
+	#define KJK_CORE_WARN(...)
+	#define KJK_CORE_INFO(...)
+	#define KJK_CORE_TRACE(...)
+	//Client logger macros
+	#define KJK_CRITICAL(...)
+	#define KJK_ERROR(...)
+	#define KJK_WARN(...)
+	#define KJK_INFO(...)
+	#define KJK_TRACE(...)
+#else
 	//Core logger macros
 	#define KJK_CORE_CRITICAL(...) SPDLOG_LOGGER_CRITICAL(::KJK::Logger::GetCoreLogger(), __VA_ARGS__)
 	#define KJK_CORE_ERROR(...)    SPDLOG_LOGGER_ERROR(::KJK::Logger::GetCoreLogger(), __VA_ARGS__)
@@ -36,17 +49,4 @@ namespace KJK
 	#define KJK_WARN(...)          SPDLOG_LOGGER_WARN(::KJK::Logger::GetClientLogger(), __VA_ARGS__)
 	#define KJK_INFO(...)          SPDLOG_LOGGER_INFO(::KJK::Logger::GetClientLogger(), __VA_ARGS__)
 	#define KJK_TRACE(...)         SPDLOG_LOGGER_TRACE(::KJK::Logger::GetClientLogger(), __VA_ARGS__)
-#else
-	//Core logger macros
-	#define KJK_CORE_CRITICAL(...)
-	#define KJK_CORE_ERROR(...)
-	#define KJK_CORE_WARN(...)
-	#define KJK_CORE_INFO(...)
-	#define KJK_CORE_TRACE(...)
-	//Client logger macros
-	#define KJK_CRITICAL(...)
-	#define KJK_ERROR(...)
-	#define KJK_WARN(...)
-	#define KJK_INFO(...)
-	#define KJK_TRACE(...)
 #endif

@@ -5,6 +5,11 @@
 Project created purely for the purpose of leaning the process of game engine development.
 Will most likely not be suitable for use by the end of the process.
 
+
+## Create using
+CMake: https://cmake.org
+vcpkg: https://vcpkg.io/en/
+
 ## Libraries
 SDL3: https://github.com/libsdl-org/SDL
 GSL: https://github.com/g-truc/glm

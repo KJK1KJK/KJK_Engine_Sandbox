@@ -21,7 +21,10 @@ endif()
 
 #Setup configuration macros
 add_compile_definitions(
-    $<$<CONFIG:Debug,Release,RelWithDebInfo>:KJK_ENABLE_LOGS>
+    $<$<CONFIG:Debug>:KJK_DEBUG>
+    $<$<CONFIG:Release>:KJK_RELEASE>
+    $<$<CONFIG:RelWithDebInfo>:KJK_DIST>
+    $<$<CONFIG:MinSizeRel>:KJK_MINSIZE>
 )
 
 #Setup C++ standard

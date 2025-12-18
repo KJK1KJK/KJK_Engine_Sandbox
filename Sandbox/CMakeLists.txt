@@ -1,8 +1,9 @@
 ﻿#Define name of the project
 project(Sandbox)
 
-#Define Executable
-add_executable(Playground "src/main.cpp")
+#Gather all source files
+file(GLOB_RECURSE SANDBOX_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp")
+add_executable(Playground ${SANDBOX_SOURCES})
 
 #Link against the Engine library
 target_link_libraries(Playground PRIVATE KJK::KJK)
