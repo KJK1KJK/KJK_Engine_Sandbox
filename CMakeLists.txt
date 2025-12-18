@@ -19,6 +19,11 @@ elseif(APPLE)
     add_compile_definitions(KJK_PLATFORM_MACOS)
 endif()
 
+#Setup configuration macros
+add_compile_definitions(
+    $<$<CONFIG:Debug,Release,RelWithDebInfo>:KJK_ENABLE_LOGS>
+)
+
 #Setup C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +38,7 @@ find_package(glad CONFIG REQUIRED)
 find_package(onnxruntime CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-enet CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 #Add subdirectories for Engine and Sandbox
 add_subdirectory(Engine)

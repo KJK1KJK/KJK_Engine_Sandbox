@@ -2,7 +2,7 @@
 project(Engine)
 
 #Gather all source files
-file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
+file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp")
 
 #Define as a static library
 add_library(Engine STATIC ${ENGINE_SOURCES})
@@ -22,4 +22,5 @@ target_link_libraries(Engine PUBLIC
     onnxruntime::onnxruntime
     cpr::cpr
     unofficial::enet::enet
+    spdlog::spdlog
 )

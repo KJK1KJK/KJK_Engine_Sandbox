@@ -16,7 +16,10 @@ namespace KJK
 
 	void Application::Run()
 	{
-		std::cout << "Game Engine Running!" << std::endl;
+		while (true)
+		{
+
+		}
 	}
 }
 

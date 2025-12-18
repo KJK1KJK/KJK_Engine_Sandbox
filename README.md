@@ -15,6 +15,7 @@ Box2d: https://box2d.org
 ENet: http://enet.bespin.org
 CPR: https://github.com/libcpr/cpr
 ONNX Runtime: https://aiinfra.visualstudio.com/PublicPackages/_artifacts/feed/ORT-Nightly
+spdlog: https://github.com/gabime/spdlog
 
 ## Sources and learning materials
 Bill Clark game architecture lecture: https://www.youtube.com/watch?v=mUeNqLcx4eI
@@ -25,7 +26,7 @@ The Cherno game engine series: https://www.youtube.com/playlist?list=PLlrATfBNZ9
 
 ECS learning blog: https://skypjack.github.io
 
-Lazyfoo sdl3 tutorial: https://lazyfoo.net/tutorials/SDL3
+Lazyfoo SDL3 tutorial: https://lazyfoo.net/tutorials/SDL3
 
 Learnopengl tutorial: https://learnopengl.com
 

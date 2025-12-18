@@ -5,6 +5,7 @@
 
 #include <KJK_Engine/Application.h> //Application definition
 #include <KJK_Engine/EntryPoint.h> //Entry Point into the application
+#include <KJK_Engine/Logger.h> //Logging system
 
 
 //Constants definition
