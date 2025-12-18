@@ -46,3 +46,4 @@ find_package(spdlog CONFIG REQUIRED)
 #Add subdirectories for Engine and Sandbox
 add_subdirectory(Engine)
 add_subdirectory(Sandbox)
+add_subdirectory(Playground)

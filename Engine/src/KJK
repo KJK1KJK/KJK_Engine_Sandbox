@@ -3,9 +3,9 @@
 //File that defines the includes and versioning for the KJK engine.
 //Used by applications that use the engine.
 
-#include <KJK_Engine/Application.h> //Application definition
-#include <KJK_Engine/EntryPoint.h> //Entry Point into the application
-#include <KJK_Engine/Logger.h> //Logging system
+#include <KJK_Engine/Core/Application.h> //Application definition
+#include <KJK_Engine/Core/EntryPoint.h> //Entry Point into the application
+#include <KJK_Engine/Core/Logger.h> //Logging system
 
 
 //Constants definition
