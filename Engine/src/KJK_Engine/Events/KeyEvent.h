@@ -60,8 +60,8 @@ namespace KJK
 	class KeyTypedEvent : public KeyEvent
 	{
 	public:
-		KeyTypedEvent(int keycode)
-			: KeyEvent(keycode), m_KeyCharacter(m_KeyCharacter) {
+		KeyTypedEvent(int keycode, char32_t character)
+			: KeyEvent(keycode), m_KeyCharacter(character) {
 		}
 
 		inline char32_t GetCharacter() const { return m_KeyCharacter; }
