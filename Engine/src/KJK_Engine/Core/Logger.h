@@ -1,7 +1,10 @@
 #pragma once
 
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#ifndef SPDLOG_ACTIVE_LEVEL
+	#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#endif
 #include "spdlog/spdlog.h"
+#include "spdlog/fmt/ostr.h" //Allows logging custom types
 
 namespace KJK
 {

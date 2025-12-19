@@ -6,7 +6,10 @@
 #include <KJK_Engine/Core/Application.h> //Application definition
 #include <KJK_Engine/Core/EntryPoint.h> //Entry Point into the application
 #include <KJK_Engine/Core/Logger.h> //Logging system
-
+#include <KJK_Engine/Events/Event.h> //Main event class and dispatcher
+#include <KJK_Engine/Events/ApplicationEvent.h> //Application event classes
+#include <KJK_Engine/Events/KeyEvent.h> //Key event classes
+#include <KJK_Engine/Events/MouseEvent.h> //Mouse event classes
 
 //Constants definition
 namespace KJK

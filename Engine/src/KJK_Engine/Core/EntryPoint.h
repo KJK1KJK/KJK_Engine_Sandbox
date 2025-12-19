@@ -15,8 +15,6 @@ extern KJK::Application* KJK::CreateApplication();
 int main(int argc, char** argv)
 {
 	KJK::Logger::Init();
-	KJK_CORE_WARN("Initialized the Logger!");
-	KJK_INFO("Initialized the Logger!");
 
 	KJK::Application* app = KJK::CreateApplication();
 	app->Run();

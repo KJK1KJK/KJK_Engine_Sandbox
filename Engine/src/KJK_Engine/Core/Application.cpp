@@ -2,6 +2,9 @@
 
 #include <iostream>
 
+#include "KJK_Engine/Core/Logger.h"
+#include <KJK_Engine/Events/ApplicationEvent.h>
+
 namespace KJK
 {
 	Application::Application()
