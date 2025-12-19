@@ -1,7 +1,5 @@
 //File for testing external library features before implementing them in the engine
 #include <KJK>
-#include <iostream>
-
 
 #include <glad/glad.h>
 

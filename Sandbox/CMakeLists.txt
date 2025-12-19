@@ -5,6 +5,9 @@ project(Sandbox)
 file(GLOB_RECURSE SANDBOX_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp")
 add_executable(SandboxApp ${SANDBOX_SOURCES})
 
+#Reuse precompile headers from the Engine
+target_precompile_headers(SandboxApp REUSE_FROM Engine)
+
 #Link against the Engine library
 target_link_libraries(SandboxApp PRIVATE KJK::KJK)
 

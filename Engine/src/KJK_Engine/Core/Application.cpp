@@ -1,7 +1,5 @@
 #include "Application.h"
 
-#include <iostream>
-
 #include "KJK_Engine/Core/Logger.h"
 #include <KJK_Engine/Events/ApplicationEvent.h>
 
@@ -19,6 +17,10 @@ namespace KJK
 
 	void Application::Run()
 	{
+		WindowResizeEvent e(1280, 720);
+		KJK_CORE_INFO(e);
+
+
 		while (true)
 		{
 

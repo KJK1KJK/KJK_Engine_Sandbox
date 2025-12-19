@@ -25,6 +25,9 @@ add_compile_definitions(
     $<$<CONFIG:Release>:KJK_RELEASE>
     $<$<CONFIG:RelWithDebInfo>:KJK_DIST>
     $<$<CONFIG:MinSizeRel>:KJK_MINSIZE>
+    $<$<PLATFORM_ID:Windows>:KJK_PLATFORM_WINDOWS>
+    $<$<PLATFORM_ID:Darwin>:KJK_PLATFORM_MACOS>
+    $<$<PLATFORM_ID:Linux>:KJK_PLATFORM_LINUX>
 )
 
 #Setup C++ standard

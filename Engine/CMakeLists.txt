@@ -8,6 +8,9 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.
 add_library(Engine STATIC ${ENGINE_SOURCES})
 add_library(KJK::KJK ALIAS Engine)
 
+#Add precompile headers
+target_precompile_headers(Engine PRIVATE "src/kjkpch.h")
+
 #Include Directories
 target_include_directories(Engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 

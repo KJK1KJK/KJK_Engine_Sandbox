@@ -5,6 +5,9 @@ project(Playground)
 file(GLOB_RECURSE PLAYGROUND_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp")
 add_executable(PlaygroundApp ${PLAYGROUND_SOURCES})
 
+#Reuse precompile headers from the Engine
+target_precompile_headers(PlaygroundApp REUSE_FROM Engine)
+
 #Add a macro to disable the default entry point
 target_compile_definitions(PlaygroundApp PRIVATE TEST_NO_ENTRYPOINT)
 
