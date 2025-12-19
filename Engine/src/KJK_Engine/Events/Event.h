@@ -41,6 +41,8 @@ namespace KJK
 		//Associated EventDispatcher which handles events
 		friend class EventDispatcher;
 	public:
+		virtual ~Event() = default;
+
 		//Getter for event type
 		virtual EventType GetEventType() const = 0;
 		//Getter for event category
@@ -92,4 +94,43 @@ namespace KJK
 	inline std::string format_as(const Event& e) {
 		return e.ToString();
 	}
+
+	//Queue for storing a buffer of events
+	class EventQueue
+	{
+	public:
+		//Add an event to the queue
+		void Push(std::unique_ptr<Event> event)
+		{
+			m_Buffer.push_back(std::move(event));
+		}
+
+		//Overload for raw pointer events
+		void Push(Event* event)
+		{
+			m_Buffer.emplace_back(event);
+		}
+
+		//Getter for the event buffer
+		std::vector<std::unique_ptr<Event>>& GetBuffer()
+		{
+			return m_Buffer;
+		}
+
+		//Process all events in the buffer with a callback function
+		void Flush(const std::function<void(Event&)>& callback)
+		{
+			for (auto& eventPtr : m_Buffer)
+			{
+				if (eventPtr)
+				{
+					callback(*eventPtr);
+				}
+			}
+			//Clear the buffer after processing
+			m_Buffer.clear();
+		}
+	private:
+		std::vector<std::unique_ptr<Event>> m_Buffer;
+	};
 }
