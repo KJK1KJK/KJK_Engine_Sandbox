@@ -20,3 +20,12 @@ if(WIN32)
         COMMAND_EXPAND_LISTS
     )
 endif()
+
+#Add the license file to the generated output directory
+if(MSVC)
+    #Define the output file
+    set(LICENSE_FILE "${CMAKE_BINARY_DIR}/out/install/x64-debug/bin/ThirdPartyNotices.txt")
+
+    #Scrape all licenses and put them into the defined file
+    set(PS_CMD "Get-ChildItem -Path '${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/share/*/copyright' | ForEach-Object { Add-Content -Path '${LICENSE_FILE}' -Value \"`n`n--- LICENSE FOR $($_.Directory.Name) ---`n\"; Get-Content $_ | Add-Content -Path '${LICENSE_FILE}' }")
+endif()
