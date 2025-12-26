@@ -36,6 +36,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #Find required packages from vcpkg
 find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_image CONFIG REQUIRED)
+find_package(SDL3_ttf CONFIG REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 find_package(box2d CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
