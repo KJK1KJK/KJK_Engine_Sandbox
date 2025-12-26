@@ -1,7 +1,7 @@
 //File for testing external library features before implementing them in the engine
 #include <KJK>
 
-#include <glad/glad.h>
+#include "Shader.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -14,10 +14,6 @@ bool init();
 void close();
 //Initializes OpenGL
 bool initGL();
-//Print shader log
-void printShaderLog(GLuint shader);
-//Print program log
-void printProgramLog(GLuint program);
 
 //Global variables
 constexpr int SCREEN_WIDTH{ 800 };
@@ -35,7 +31,7 @@ GLuint gVAOs[2];
 GLuint gEBOs[2];
 
 //Shader program ID
-GLuint gShaderPrograms[2];
+std::optional<std::array<Shader, 2>> gShaders;
 
 //The main function
 int main(int argc, char* args[])
@@ -101,16 +97,22 @@ int main(int argc, char* args[])
 			//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 			//Use the defined shader program
-			glUseProgram(gShaderPrograms[0]);
+			(*gShaders)[0].Use();
+
+			(*gShaders)[1].SetFloat("uHorizontalOffset", 0.2f);
 
 			//Bind the first VAO
 			glBindVertexArray(gVAOs[0]);
 
 			//Draw a square
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
 
 			//Use the defined shader program
-			glUseProgram(gShaderPrograms[1]);
+			(*gShaders)[1].Use();
+
+			float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+			float greenValue = (sin(timeValue) / 2.0f) + 0.5f;
+			(*gShaders)[1].SetFloat("uGreen", greenValue);
 
 			//Bind the second VAO
 			glBindVertexArray(gVAOs[1]);
@@ -146,7 +148,7 @@ bool init()
 	bool success = true;
 
 	//Initialize SDL
-	if (SDL_Init(SDL_INIT_VIDEO) == false)
+	if (SDL_Init(SDL_INIT_VIDEO) == NULL)
 	{
 		KJK_ERROR("Failed to initialize SDL: {0}", SDL_GetError());
 		success = false;
@@ -213,204 +215,75 @@ bool initGL()
 	//Generate EBOs
 	glGenBuffers(2, gEBOs);
 
-	//Create a vertex shader source
-	const GLchar* vertexShaderSource =
+	//Create two shaders
+	gShaders.emplace(std::array<Shader, 2>{
+		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag")
+	});
+
+	//Set of vertices for a triangle
+	GLfloat vertices[] =
 	{
-		"#version 450 core\n"
-		"layout (location = 0) in vec3 APos;\n"
-		"void main()\n"
-		"{\n"
-		"   gl_Position = vec4(APos.x, APos.y, APos.z, 1.0);\n"
-		"}\0"
+		//Triangle
+		 0.0f,  0.5f, 0.0f,  1.0f, 0.0f, 0.0f,  //Top
+		 0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,  //Bottom Right
+		-0.5f, -0.5f, 0.0f,  0.0f, 0.0f, 1.0f   //Bottom Left
+	};
+	GLuint indices[] =
+	{
+		0, 1, 2  //First Triangle
 	};
 
-	//Create a vertex shader
-	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	//Bind VAO
+	glBindVertexArray(gVAOs[0]);
 
-	//Attach the shader source to the shader object
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	//Compile the vertex shader
-	glCompileShader(vertexShader);
+	//Bind VBO
+	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[0]);
+	//Fill VBO with vertex data
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-	//Check for vertex shader compile errors
-	GLint shaderCompiled = GL_FALSE;
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &shaderCompiled);
-	if (shaderCompiled != GL_TRUE)
+	//Bind EBO
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
+	//Fill EBO with index data
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+	//Inform OpenGL how to interpret the vertex data
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	//Set of vertices for a traingle
+	GLfloat vertices2[] =
 	{
-		KJK_ERROR("Unable to compile vertex shader {0}!", vertexShader);
-		printShaderLog(vertexShader);
-		success = false;
-	}
-	else
+		 0.95f,  0.95f, 0.0f,   //Top Right
+		 0.95f,  0.55f, 0.0f,   //Bottom
+		 0.55f,  0.95f, 0.0f,   //Top Left
+	};
+	GLuint indices2[] =
 	{
-		//Create a fragment shader source to color a square orange
-		const GLchar* fragmentShaderSource =
-		{
-			"#version 450 core\n"
-			"out vec4 FragColor;\n"
-			"void main()\n"
-			"{\n"
-			"   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-			"}\0"
-		};
+		0, 1, 2
+	};
 
-		//Create a fragment shader
-		GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	//Bind VAO
+	glBindVertexArray(gVAOs[1]);
 
-		//Attach the shader source to the shader object
-		glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-		//Compile the fragment shader
-		glCompileShader(fragmentShader);
+	//Bind VBO
+	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[1]);
+	//Fill VBO with vertex data
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices2), vertices2, GL_STATIC_DRAW);
 
-		//Check for fragment shader compile errors
-		shaderCompiled = GL_FALSE;
-		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &shaderCompiled);
-		if (shaderCompiled != GL_TRUE)
-		{
-			KJK_ERROR("Unable to compile fragment shader {0}!", fragmentShader);
-			printShaderLog(fragmentShader);
-			success = false;
-		}
-		else
-		{
-			//Create shader program
-			gShaderPrograms[0] = glCreateProgram();
+	//Bind EBO
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[1]);
+	//Fill EBO with index data
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices2), indices2, GL_STATIC_DRAW);
 
-			//Attach shaders to the program
-			glAttachShader(gShaderPrograms[0], vertexShader);
-			glAttachShader(gShaderPrograms[0], fragmentShader);
-			glLinkProgram(gShaderPrograms[0]);
+	//Inform OpenGL how to interpret the vertex data
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
 
-			//Check for linking errors
-			GLint programLinked = GL_TRUE;
-			glGetProgramiv(gShaderPrograms[0], GL_LINK_STATUS, &programLinked);
-			if (programLinked != GL_TRUE)
-			{
-				KJK_ERROR("Error linking program {0}!", gShaderPrograms[0]);
-				printProgramLog(gShaderPrograms[0]);
-				success = false;
-			}
-			else
-			{
-				//Delete the fragment shader as it's no longer needed
-				glDeleteShader(fragmentShader);
-
-				//Set of vertices for a square
-				GLfloat vertices[] =
-				{
-					//Square
-					 0.5f,  0.5f, 0.0f,  //Top Right
-					 0.5f, -0.5f, 0.0f,  //Bottom Right
-					-0.5f, -0.5f, 0.0f,  //Bottom Left
-					-0.5f,  0.5f, 0.0f  //Top Left
-				};
-				GLuint indices[] =
-				{
-					0, 1, 3,  //First Triangle
-					1, 2, 3  //Second Triangle
-				};
-
-				//Bind VAO
-				glBindVertexArray(gVAOs[0]);
-
-				//Bind VBO
-				glBindBuffer(GL_ARRAY_BUFFER, gVBOs[0]);
-				//Fill VBO with vertex data
-				glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-				//Bind EBO
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
-				//Fill EBO with index data
-				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-				//Inform OpenGL how to interpret the vertex data
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-				glEnableVertexAttribArray(0);
-			}
-		}
-
-		//Create a fragment shader source to color a triangle yellow
-		fragmentShaderSource =
-		{
-			"#version 450 core\n"
-			"out vec4 FragColor;\n"
-			"void main()\n"
-			"{\n"
-			"   FragColor = vec4(1.0f, 1.0f, 0.0f, 1.0f);\n"
-			"}\0"
-		};
-
-		//Create a fragment shader
-		fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-
-		//Attach the shader source to the shader object
-		glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-		//Compile the fragment shader
-		glCompileShader(fragmentShader);
-
-		//Check for fragment shader compile errors
-		shaderCompiled = GL_FALSE;
-		glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &shaderCompiled);
-		if (shaderCompiled != GL_TRUE)
-		{
-			KJK_ERROR("Unable to compile fragment shader {0}!", fragmentShader);
-			printShaderLog(fragmentShader);
-			success = false;
-		}
-		else
-		{
-			//Create shader program
-			gShaderPrograms[1] = glCreateProgram();
-
-			//Attach shaders to the program
-			glAttachShader(gShaderPrograms[1], vertexShader);
-			glAttachShader(gShaderPrograms[1], fragmentShader);
-			glLinkProgram(gShaderPrograms[1]);
-
-			//Check for linking errors
-			GLint programLinked = GL_TRUE;
-			glGetProgramiv(gShaderPrograms[1], GL_LINK_STATUS, &programLinked);
-			if (programLinked != GL_TRUE)
-			{
-				KJK_ERROR("Error linking program {0}!", gShaderPrograms[1]);
-				printProgramLog(gShaderPrograms[1]);
-				success = false;
-			}
-			else
-			{
-				//Set of vertices for a traingle
-				GLfloat vertices[] =
-				{
-					 0.9f,  0.9f, 0.0f,   //Top Right
-					 0.9f,  0.7f, 0.0f,   //Bottom
-					 0.7f,  0.9f, 0.0f    //Top Left
-				};
-				GLuint indices[] =
-				{
-					0, 1, 2
-				};
-
-				//Bind VAO
-				glBindVertexArray(gVAOs[1]);
-
-				//Bind VBO
-				glBindBuffer(GL_ARRAY_BUFFER, gVBOs[1]);
-				//Fill VBO with vertex data
-				glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-				//Bind EBO
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[1]);
-				//Fill EBO with index data
-				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-				//Inform OpenGL how to interpret the vertex data
-				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-				glEnableVertexAttribArray(0);
-			}
-		}
-		
-	}
-
+	//Return the success flag
 	return success;
 }
 
@@ -418,10 +291,10 @@ bool initGL()
 //Cleans up and closes SDL and all used objects
 void close()
 {
+	//Delete OpenGL objects
 	glDeleteVertexArrays(2, gVAOs);
 	glDeleteBuffers(2, gVBOs);
-	glDeleteProgram(gShaderPrograms[0]);
-	glDeleteProgram(gShaderPrograms[1]);
+	glDeleteBuffers(2, gEBOs);
 	
 	//Destroy window
 	if (gWindow != nullptr)
@@ -432,68 +305,4 @@ void close()
 
 	//Quit SDL subsystems
 	SDL_Quit();
-}
-
-//Prints out the shader log for a shader object
-void printShaderLog( GLuint shader )
-{
-	//Make sure name is shader
-	if( glIsShader( shader ) )
-	{
-		//Shader log length
-		int infoLogLength = 0;
-		int maxLength = infoLogLength;
-		
-		//Get info string length
-		glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &maxLength );
-		
-		//Allocate string
-		char* infoLog = new char[ maxLength ];
-		
-		//Get info log and print it
-		glGetShaderInfoLog( shader, maxLength, &infoLogLength, infoLog );
-		if( infoLogLength > 0 )
-		{
-			KJK_ERROR("{0}", infoLog);
-		}
-
-		//Deallocate string
-		delete[] infoLog;
-	}
-	else
-	{
-		KJK_ERROR("Name {0} is not a shader", shader);
-	}
-}
-
-//Prints out the program log for a program object
-void printProgramLog( GLuint program )
-{
-	//Make sure name is shader
-	if(glIsProgram(program))
-	{
-		//Program log length
-		int infoLogLength = 0;
-		int maxLength = infoLogLength;
-		
-		//Get info string length
-		glGetProgramiv( program, GL_INFO_LOG_LENGTH, &maxLength );
-		
-		//Allocate string
-		char* infoLog = new char[ maxLength ];
-		
-		//Get info log and print it
-		glGetProgramInfoLog( program, maxLength, &infoLogLength, infoLog );
-		if( infoLogLength > 0 )
-		{
-			KJK_ERROR("{0}", infoLog);
-		}
-		
-		//Deallocate string
-		delete[] infoLog;
-	}
-	else
-	{
-		KJK_ERROR("Name {0} is not a program", program);
-	}
 }

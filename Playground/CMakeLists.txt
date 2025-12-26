@@ -2,7 +2,7 @@
 project(Playground)
 
 #Gather all source files
-file(GLOB_RECURSE PLAYGROUND_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp")
+file(GLOB_RECURSE PLAYGROUND_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h" "src/*.hpp" "assets/shaders/*.vert" "assets/shaders/*.frag")
 add_executable(PlaygroundApp ${PLAYGROUND_SOURCES})
 
 #Reuse precompile headers from the Engine
