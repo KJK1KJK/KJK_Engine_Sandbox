@@ -130,7 +130,7 @@ Shader& Shader::operator=(Shader&& other) noexcept
 }
 
 //Use the shader program
-void Shader::Use()
+void Shader::Use() const
 {
 	glUseProgram(ID);
 }

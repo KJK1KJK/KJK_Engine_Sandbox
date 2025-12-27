@@ -2,14 +2,9 @@
 #include <KJK>
 
 #include "Shader.h"
+#include "Camera.h"
 
-#include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-#include <SDL3_image/SDL_image.h>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 //Initializes the logging system
 void initLogger();
@@ -46,6 +41,9 @@ GLuint gTextures[2];
 //Cube positions
 std::optional<std::array<glm::vec3, 10>> gCubePositions;
 
+//Camera object
+Camera* gCamera;
+
 //The main function
 int main(int argc, char* args[])
 {
@@ -79,13 +77,17 @@ int main(int argc, char* args[])
 			SDL_Event e;
 			SDL_zero(e);
 
+			//Time variables
+			float deltaTime{ 0.0f };
+			float lastFrame{ 0.0f };
+
 			//Set the initial mix value for texture blending
 			float mixValue = 0.2f;
 			(*gShaders)[0].Use();
 			(*gShaders)[0].SetFloat("mixValue", mixValue);
 
-			//Set the initial FoV
-			float fov = 45.0f;
+			//Mouse Input mode setting
+			bool mouseCaptured = true;
 
 			//Enum for input state control
 			enum class InputState
@@ -101,6 +103,14 @@ int main(int argc, char* args[])
 				//Handle events on queue
 				while (SDL_PollEvent(&e) != 0)
 				{
+					//Calculate delta time
+					float currentFrame = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+					deltaTime = currentFrame - lastFrame;
+					lastFrame = currentFrame;
+
+					//Get keyboard state
+					const bool* keyState = SDL_GetKeyboardState(NULL);
+
 					//User requests quit
 					if (e.type == SDL_EVENT_QUIT)
 					{
@@ -130,6 +140,10 @@ int main(int argc, char* args[])
 						case SDLK_2: //Enable FoV control
 							inputState = InputState::FOV;
 							break;
+						case SDLK_M: //Switch mouse capture mode
+							mouseCaptured = !mouseCaptured;
+							SDL_SetWindowRelativeMouseMode(gWindow, mouseCaptured);
+							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
 							{
@@ -144,10 +158,10 @@ int main(int argc, char* args[])
 								(*gShaders)[0].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV: //Increase the FoV
-								fov += 5.0f;
-								if (fov > 360.0f)
+								gCamera->fov += 5.0f;
+								if (gCamera->fov > 360.0f)
 								{
-									fov = 360.0f;
+									gCamera->fov = 360.0f;
 								}
 								break;
 							default:
@@ -168,10 +182,10 @@ int main(int argc, char* args[])
 								(*gShaders)[0].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV:
-								fov -= 5.0f;
-								if (fov < 0.0f)
+								gCamera->fov -= 5.0f;
+								if (gCamera->fov < 0.0f)
 								{
-									fov = 0.0f;
+									gCamera->fov = 0.0f;
 								}
 								break;
 							default:
@@ -182,6 +196,9 @@ int main(int argc, char* args[])
 							break;
 						}
 					}
+
+					//Handle camera movement input
+					gCamera->HandleInput(e, deltaTime, mouseCaptured, keyState);
 				}
 
 				//Set the clear color
@@ -203,15 +220,13 @@ int main(int argc, char* args[])
 				glBindTexture(GL_TEXTURE_2D, gTextures[0]);
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
-
 				
 				//Define a view matrix for the square
-				glm::mat4 view = glm::mat4(1.0f);
-				view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+				glm::mat4 view = gCamera->GetViewMatrix();
 
 				//Define a projection matrix for the square
 				glm::mat4 projection = glm::mat4(1.0f);
-				projection = glm::perspective(glm::radians(fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
 				//Apply the transformation matrices to the shader
 				(*gShaders)[0].SetMat4("view", view);
@@ -299,6 +314,12 @@ bool init()
 			}
 			else
 			{
+				//Set the mouse mode to relative
+				SDL_SetWindowRelativeMouseMode(gWindow, true);
+
+				//Initialize the camera
+				gCamera = new Camera(glm::vec3(0.0f, 0.0f, 3.0f));
+
 				//Load OpenGL functions using GLAD
 				if(!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
 				{
@@ -558,6 +579,9 @@ void close()
 	
 	//Destroy texture
 	glDeleteTextures(2, gTextures);
+
+	//Delete the camera
+	delete gCamera;
 
 	//Destroy window
 	if (gWindow != nullptr)

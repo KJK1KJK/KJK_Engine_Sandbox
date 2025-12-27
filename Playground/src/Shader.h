@@ -1,7 +1,5 @@
 #pragma once
 
-#include <glm/fwd.hpp>
-
 class Shader
 {
 public:
@@ -22,7 +20,7 @@ public:
 	Shader& operator=(Shader&& other) noexcept;
 
 	//Use the shader program
-	void Use();
+	void Use() const;
 
 	//Set a boolean uniform variable in the shader
 	void SetBool(const std::string& name, bool value) const;
