@@ -1,5 +1,7 @@
 #pragma once
 
+#include <glm/fwd.hpp>
+
 class Shader
 {
 public:
@@ -28,6 +30,8 @@ public:
 	void SetInt(const std::string& name, int value) const;
 	//Set a float uniform variable in the shader
 	void SetFloat(const std::string& name, float value) const;
+	//Set a matrix4 uniform variable in the shader
+	void SetMat4(const std::string& name, const glm::mat4& mat) const;
 
 private:
 	//Prints out the shader log for a shader object

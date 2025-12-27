@@ -7,6 +7,10 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3_image/SDL_image.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 //Initializes the logging system
 void initLogger();
 //Initializes OpenGl and SDL, then creates a window
@@ -130,12 +134,15 @@ int main(int argc, char* args[])
 				}
 
 				//Set the clear color
-				glClearColor(1.f, 1.f, 1.f, 1.0f);
+				glClearColor(0.4f, 0.f, 0.4f, 1.0f);
 				//Clear the color buffer
 				glClear(GL_COLOR_BUFFER_BIT);
 
 				//Set to polygon wireframe mode
 				//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+				//Calculate the time value
+				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
 
 				//Use the defined shader program
 				(*gShaders)[0].Use();
@@ -146,6 +153,13 @@ int main(int argc, char* args[])
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
 
+				//Set a transformation matrix for the square
+				glm::mat4 trans = glm::mat4(1.0f);
+				trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
+				trans = glm::rotate(trans, timeValue, glm::vec3(0.0f, 0.0f, 1.0f));
+				//Set the matrix uniform
+				(*gShaders)[0].SetMat4("transform", trans);
+
 				//Bind the first VAO
 				glBindVertexArray(gVAOs[0]);
 
@@ -155,9 +169,15 @@ int main(int argc, char* args[])
 				//Use the defined shader program
 				(*gShaders)[1].Use();
 
-				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+				//Calculate a green value based on time
 				float greenValue = (sin(timeValue) / 2.0f) + 0.5f;
 				(*gShaders)[1].SetFloat("uGreen", greenValue);
+
+				//Set a transformation matrix for the triangle
+				glm::mat4 trans2 = glm::mat4(1.0f);
+				trans2 = glm::translate(trans2, glm::vec3(-0.5f, 0.5f, 0.0f));
+				trans2 = glm::scale(trans2, glm::vec3(greenValue, greenValue, greenValue));
+				(*gShaders)[1].SetMat4("transform", trans2);
 
 				//Bind the second VAO
 				glBindVertexArray(gVAOs[1]);
@@ -308,9 +328,9 @@ bool initGL()
 	//Set of vertices for a triangle
 	GLfloat vertices2[] =
 	{
-		 0.95f,  0.95f, 0.0f,   //Top Right
-		 0.95f,  0.55f, 0.0f,   //Bottom
-		 0.55f,  0.95f, 0.0f,   //Top Left
+		 0.5f,  0.5f, 0.0f,   //Top Right
+		 0.5f, -0.5f, 0.0f,   //Bottom Right
+		-0.5f,  0.5f, 0.0f,   //Top Left
 	};
 	GLuint indices2[] =
 	{
@@ -414,6 +434,7 @@ bool loadMedia()
 	(*gShaders)[0].SetInt("texture1", 0);
 	(*gShaders)[0].SetInt("texture2", 1);
 
+	//Return the success flag
 	return success;
 }
 
