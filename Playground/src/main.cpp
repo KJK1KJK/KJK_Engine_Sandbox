@@ -23,8 +23,8 @@ bool loadMedia();
 void close();
 
 //Global variables
-constexpr int SCREEN_WIDTH{ 800 };
-constexpr int SCREEN_HEIGHT{ 600 };
+int SCREEN_WIDTH{ 800 };
+int SCREEN_HEIGHT{ 600 };
 
 //The window to render to
 SDL_Window* gWindow = nullptr;
@@ -42,6 +42,9 @@ std::optional<std::array<Shader, 2>> gShaders;
 
 //Texture ID
 GLuint gTextures[2];
+
+//Cube positions
+std::optional<std::array<glm::vec3, 10>> gCubePositions;
 
 //The main function
 int main(int argc, char* args[])
@@ -69,7 +72,6 @@ int main(int argc, char* args[])
 		}
 		else
 		{
-
 			//Main loop flag
 			bool quit = false;
 
@@ -81,6 +83,17 @@ int main(int argc, char* args[])
 			float mixValue = 0.2f;
 			(*gShaders)[0].Use();
 			(*gShaders)[0].SetFloat("mixValue", mixValue);
+
+			//Set the initial FoV
+			float fov = 45.0f;
+
+			//Enum for input state control
+			enum class InputState
+			{
+				NONE,
+				MIX,
+				FOV
+			} inputState{InputState::NONE};
 
 			//While application is running
 			while (!quit)
@@ -94,10 +107,14 @@ int main(int argc, char* args[])
 						quit = true;
 					}
 					//Window resize event
-					if (e.type == SDL_EVENT_WINDOW_RESIZED)
+					else if (e.type == SDL_EVENT_WINDOW_RESIZED)
 					{
 						//Adjust the viewport when the window size changes
 						glViewport(0, 0, e.window.data1, e.window.data2);
+
+						//Adjust the screen width and height variables
+						SCREEN_WIDTH = e.window.data1;
+						SCREEN_HEIGHT = e.window.data2;
 					}
 					//Handle keyboard input
 					else if (e.type == SDL_EVENT_KEY_DOWN)
@@ -107,25 +124,59 @@ int main(int argc, char* args[])
 						case SDLK_ESCAPE: //Exit the application
 							quit = true;
 							break;
-						case SDLK_UP: //Increase the mix value
-							mixValue += 0.05f;
-							if(mixValue > 1.0f)
-							{
-								mixValue = 1.0f;
-							}
-							//Apply the new mix value
-							(*gShaders)[0].Use();
-							(*gShaders)[0].SetFloat("mixValue", mixValue);
+						case SDLK_1: //Enable mix value control
+							inputState = InputState::MIX;
 							break;
-						case SDLK_DOWN: //Decrease the mix value
-							mixValue -= 0.05f;
-							if (mixValue < 0.0f)
+						case SDLK_2: //Enable FoV control
+							inputState = InputState::FOV;
+							break;
+						case SDLK_UP: //Increase the appropriate value
+							switch (inputState)
 							{
-								mixValue = 0.0f;
+							case InputState::MIX: //Increase the mix value
+								mixValue += 0.05f;
+								if (mixValue > 1.0f)
+								{
+									mixValue = 1.0f;
+								}
+								//Apply the new mix value
+								(*gShaders)[0].Use();
+								(*gShaders)[0].SetFloat("mixValue", mixValue);
+								break;
+							case InputState::FOV: //Increase the FoV
+								fov += 5.0f;
+								if (fov > 360.0f)
+								{
+									fov = 360.0f;
+								}
+								break;
+							default:
+								break;
 							}
-							//Apply the new mix value
-							(*gShaders)[0].Use();
-							(*gShaders)[0].SetFloat("mixValue", mixValue);
+							break;
+						case SDLK_DOWN: //Decrease the appropriate value
+							switch (inputState)
+							{
+							case InputState::MIX:
+								mixValue -= 0.05f;
+								if (mixValue < 0.0f)
+								{
+									mixValue = 0.0f;
+								}
+								//Apply the new mix value
+								(*gShaders)[0].Use();
+								(*gShaders)[0].SetFloat("mixValue", mixValue);
+								break;
+							case InputState::FOV:
+								fov -= 5.0f;
+								if (fov < 0.0f)
+								{
+									fov = 0.0f;
+								}
+								break;
+							default:
+								break;
+							}
 							break;
 						default:
 							break;
@@ -136,7 +187,7 @@ int main(int argc, char* args[])
 				//Set the clear color
 				glClearColor(0.4f, 0.f, 0.4f, 1.0f);
 				//Clear the color buffer
-				glClear(GL_COLOR_BUFFER_BIT);
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 				//Set to polygon wireframe mode
 				//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -153,37 +204,41 @@ int main(int argc, char* args[])
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
 
-				//Set a transformation matrix for the square
-				glm::mat4 trans = glm::mat4(1.0f);
-				trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
-				trans = glm::rotate(trans, timeValue, glm::vec3(0.0f, 0.0f, 1.0f));
-				//Set the matrix uniform
-				(*gShaders)[0].SetMat4("transform", trans);
+				
+				//Define a view matrix for the square
+				glm::mat4 view = glm::mat4(1.0f);
+				view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+
+				//Define a projection matrix for the square
+				glm::mat4 projection = glm::mat4(1.0f);
+				projection = glm::perspective(glm::radians(fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+
+				//Apply the transformation matrices to the shader
+				(*gShaders)[0].SetMat4("view", view);
+				(*gShaders)[0].SetMat4("projection", projection);
 
 				//Bind the first VAO
 				glBindVertexArray(gVAOs[0]);
 
-				//Draw a square
-				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				//Iterate over cube position to draw 10 cubes
+				for (GLuint i = 0; i < 10; i++)
+				{
+					//Define a model matrix for the square and move each cube to the correct position
+					glm::mat4 model = glm::mat4(1.0f);
+					model = glm::translate(model, (*gCubePositions)[i]);
 
-				//Use the defined shader program
-				(*gShaders)[1].Use();
+					//Calculate the angle based on the i value
+					float angle = 20.0f * (i+1);
 
-				//Calculate a green value based on time
-				float greenValue = (sin(timeValue) / 2.0f) + 0.5f;
-				(*gShaders)[1].SetFloat("uGreen", greenValue);
+					//Rotate the cube over time
+					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
 
-				//Set a transformation matrix for the triangle
-				glm::mat4 trans2 = glm::mat4(1.0f);
-				trans2 = glm::translate(trans2, glm::vec3(-0.5f, 0.5f, 0.0f));
-				trans2 = glm::scale(trans2, glm::vec3(greenValue, greenValue, greenValue));
-				(*gShaders)[1].SetMat4("transform", trans2);
+					//Apply the model matrix to the shader
+					(*gShaders)[0].SetMat4("model", model);
 
-				//Bind the second VAO
-				glBindVertexArray(gVAOs[1]);
-
-				//Draw a triangle
-				glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+					//Draw a square
+					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				}
 
 				//Unbind the VAO
 				glBindVertexArray(0);
@@ -227,7 +282,7 @@ bool init()
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 		//Create a window
-		gWindow = SDL_CreateWindow("LearnOpenGL", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
+		gWindow = SDL_CreateWindow("LearnOpenGL", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 		if (gWindow == NULL)
 		{
 			KJK_ERROR("Failed to create window: {0}", SDL_GetError());
@@ -281,25 +336,65 @@ bool initGL()
 	//Generate EBOs
 	glGenBuffers(2, gEBOs);
 
+	//Enable depth testing
+	glEnable(GL_DEPTH_TEST);
+
 	//Create two shaders
-	gShaders.emplace(std::array<Shader, 2>{
+	gShaders.emplace(std::array<Shader, 2>
+	{
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag")
 	});
 
-	//Set of vertices for a square
+	//Set of vertices for a cube
 	GLfloat vertices[] =
 	{
 		//Vertex Positions   //Colors           //Texture Coordinates
-		 0.5f,  0.5f, 0.0f,  1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
-		-0.5f, -0.5f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-		-0.5f,  0.5f, 0.0f,  1.0f, 1.0f, 0.0f,  0.0f, 2.0f   //Top Left
+		//Front side
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
+		-0.5f, -0.5f,  0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
+		//Back Side
+		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
+		-0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   //Top Left
+		//Left Side
+		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
+		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
+		-0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
+		//Right Side
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
+		 0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   //Top Left
+		//Top Side
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
+		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
+	    -0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
+	    //Bottom Side
+		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
+	    -0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
+	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f   //Top Left
 	};
 	GLuint indices[] =
 	{
-		0, 1, 2,  //First Triangle
-		0, 2, 3  //First Triangle
+		 0,  1,  2,  //First Front Triangle
+		 0,  2,  3,  //Second Front Triangle
+		 4,  5,  6,  //First Back Triangle
+		 4,  6,  7,  //Second Back Triangle
+		 8,  9, 10,  //First Left Triangle
+		 8, 10, 11,  //Second Left Triangle
+		12, 13, 14,  //First Right Triangle
+		12, 14, 15,  //Second Right Triangle
+		16, 17, 18,  //First Top Triangle
+		16, 18, 19,  //Second Top Triangle
+		20, 21, 22,  //First Bottom Triangle
+		20, 22, 23   //Second Bottom Triangle
 	};
 
 	//Bind VAO
@@ -353,6 +448,21 @@ bool initGL()
 	//Inform OpenGL how to interpret the vertex data
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+
+	//Define positions to draw the cubes to
+	gCubePositions.emplace(std::array<glm::vec3, 10>
+	{
+		glm::vec3( 0.0f,  0.0f,  0.0f),
+		glm::vec3( 2.0f,  5.0f, -15.0f),
+		glm::vec3(-1.5f, -2.2f, -2.5f),
+		glm::vec3(-3.8f, -2.0f, -12.3f),
+		glm::vec3( 2.4f, -0.4f, -3.5f),
+		glm::vec3(-1.7f,  3.0f, -7.5f),
+		glm::vec3( 1.3f, -2.0f, -2.5f),
+		glm::vec3( 1.5f,  2.0f, -2.5f),
+		glm::vec3( 1.5f,  0.2f, -1.5f),
+		glm::vec3(-1.3f,  1.0f, -1.5f)
+	});
 
 	//Return the success flag
 	return success;
