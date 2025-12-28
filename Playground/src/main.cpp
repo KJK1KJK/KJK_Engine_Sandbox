@@ -33,13 +33,16 @@ GLuint gVAOs[2];
 GLuint gEBOs[2];
 
 //Shader program ID
-std::optional<std::array<Shader, 2>> gShaders;
+std::optional<std::array<Shader, 3>> gShaders;
 
 //Texture ID
 GLuint gTextures[2];
 
 //Cube positions
 std::optional<std::array<glm::vec3, 10>> gCubePositions;
+
+//Light source position
+glm::vec3 gLightPos = glm::vec3(1.0f);
 
 //Camera object
 Camera* gCamera;
@@ -213,7 +216,7 @@ int main(int argc, char* args[])
 				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
 
 				//Use the defined shader program
-				(*gShaders)[0].Use();
+				(*gShaders)[1].Use();
 
 				//Bind the textures
 				glActiveTexture(GL_TEXTURE0);
@@ -229,8 +232,8 @@ int main(int argc, char* args[])
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
 				//Apply the transformation matrices to the shader
-				(*gShaders)[0].SetMat4("view", view);
-				(*gShaders)[0].SetMat4("projection", projection);
+				(*gShaders)[1].SetMat4("view", view);
+				(*gShaders)[1].SetMat4("projection", projection);
 
 				//Bind the first VAO
 				glBindVertexArray(gVAOs[0]);
@@ -249,11 +252,31 @@ int main(int argc, char* args[])
 					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
 
 					//Apply the model matrix to the shader
-					(*gShaders)[0].SetMat4("model", model);
+					(*gShaders)[1].SetMat4("model", model);
 
 					//Draw a square
 					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 				}
+
+				//Switch to the light source shader
+				(*gShaders)[2].Use();
+
+				//Apply the transformation matrices to the shader
+				(*gShaders)[2].SetMat4("view", view);
+				(*gShaders)[2].SetMat4("projection", projection);
+
+				//Set the model matrix for the light source cube
+				glm::mat4 model = glm::mat4(1.0f);
+				model = glm::translate(model, gLightPos);
+				//Scale down the light source cube
+				model = glm::scale(model, glm::vec3(0.2f));
+				//Apply the model matrix to the shader
+				(*gShaders)[2].SetMat4("model", model);
+
+				//Bind the light source VAO
+				glBindVertexArray(gVAOs[1]);
+				//Draw the light source cube
+				glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 
 				//Unbind the VAO
 				glBindVertexArray(0);
@@ -360,13 +383,6 @@ bool initGL()
 	//Enable depth testing
 	glEnable(GL_DEPTH_TEST);
 
-	//Create two shaders
-	gShaders.emplace(std::array<Shader, 2>
-	{
-		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag")
-	});
-
 	//Set of vertices for a cube
 	GLfloat vertices[] =
 	{
@@ -453,22 +469,24 @@ bool initGL()
 		0, 1, 2
 	};
 
-	//Bind VAO
+	//Bind VAO for a light object
 	glBindVertexArray(gVAOs[1]);
 
-	//Bind VBO
-	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[1]);
-	//Fill VBO with vertex data
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices2), vertices2, GL_STATIC_DRAW);
+	//Bind VBO for a light object
+	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[0]);
 
-	//Bind EBO
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[1]);
-	//Fill EBO with index data
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices2), indices2, GL_STATIC_DRAW);
+	//Bind EBO for a light object
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
 
-	//Inform OpenGL how to interpret the vertex data
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	//Inform OpenGL how to interpret the vertex data for a light object
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
 
 	//Define positions to draw the cubes to
 	gCubePositions.emplace(std::array<glm::vec3, 10>
@@ -485,6 +503,9 @@ bool initGL()
 		glm::vec3(-1.3f,  1.0f, -1.5f)
 	});
 
+	//Define the light position
+	gLightPos = glm::vec3(1.2f, 1.0f, 2.0f);
+
 	//Return the success flag
 	return success;
 }
@@ -493,6 +514,14 @@ bool loadMedia()
 {
 	//Loading success flag
 	bool success = true;
+
+	//Create the shaders
+	gShaders.emplace(std::array<Shader, 3>
+	{
+		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
+			Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
+			Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
+	});
 
 	//Load the wood container texture
 	SDL_Surface* containerSurface = IMG_Load("assets/container.jpg");
@@ -561,9 +590,17 @@ bool loadMedia()
 	}
 
 	//Set the texture uniforms
-	(*gShaders)[0].Use();
-	(*gShaders)[0].SetInt("texture1", 0);
-	(*gShaders)[0].SetInt("texture2", 1);
+	(*gShaders)[1].Use();
+	(*gShaders)[1].SetInt("texture1", 0);
+	(*gShaders)[1].SetInt("texture2", 1);
+
+	//Set the color uniforms for the light on the objects
+	(*gShaders)[1].SetVec3("objectColor", glm::vec3(1.0f, 0.5f, 0.31f));
+	(*gShaders)[1].SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+
+	//Set the color uniforms for the light source
+	(*gShaders)[2].Use();
+	(*gShaders)[2].SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
 	//Return the success flag
 	return success;

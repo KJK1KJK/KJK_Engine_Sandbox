@@ -30,6 +30,8 @@ public:
 	void SetFloat(const std::string& name, float value) const;
 	//Set a matrix4 uniform variable in the shader
 	void SetMat4(const std::string& name, const glm::mat4& mat) const;
+	//Set a vector3 uniform variable in the shader
+	void SetVec3(const std::string& name, const glm::vec3& vec) const;
 
 private:
 	//Prints out the shader log for a shader object
