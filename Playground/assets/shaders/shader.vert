@@ -9,12 +9,22 @@ out vec3 ourColor;
 out vec2 texCoords;
 out vec3 normal;
 out vec3 fragPos;
-out vec3 lightPosView;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
-uniform vec3 lightPos;
+
+struct Light {
+	vec3 position;
+
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+};
+
+uniform Light light;
+
+out Light lightView;
 
 void main()
 {
@@ -23,5 +33,8 @@ void main()
 	texCoords = aTexCoords;
 	normal = mat3(transpose(inverse(view * model))) * aNormal;
 	fragPos = vec3(view * model * vec4(aPos, 1.0));
-	lightPosView = vec3(view * vec4(lightPos, 1.0));
+
+	Light lightV = light;
+	lightV.position = vec3(view * vec4(light.position, 1.0));
+	lightView = lightV;
 }

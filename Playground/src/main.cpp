@@ -41,11 +41,18 @@ GLuint gTextures[2];
 //Cube positions
 std::optional<std::array<glm::vec3, 10>> gCubePositions;
 
-//Light source position
-glm::vec3 gLightPos = glm::vec3(1.0f);
-
 //Camera object
 Camera* gCamera;
+
+//Light color and position struct
+struct Light
+{
+	glm::vec3 position;
+
+	glm::vec3 ambient;
+	glm::vec3 diffuse;
+	glm::vec3 specular;
+} gLight(glm::vec3(1.0f), glm::vec3(1.0f), glm::vec3(1.0f), glm::vec3(1.0f));
 
 //The main function
 int main(int argc, char* args[])
@@ -236,16 +243,29 @@ int main(int argc, char* args[])
 				(*gShaders)[2].SetMat4("projection", projection);
 
 				//Move the lightning source on an orbit
-				gLightPos.x = 10.5f * sin(timeValue);
-				gLightPos.z = 10.5f * cos(timeValue);
+				gLight.position.x = 10.5f * sin(0.35f * timeValue);
+				gLight.position.z = 10.5f * cos(0.35f * timeValue);
 
 				//Set the model matrix for the light source cube
 				glm::mat4 model = glm::mat4(1.0f);
-				model = glm::translate(model, gLightPos);
+				model = glm::translate(model, gLight.position);
 				//Scale down the light source cube
 				model = glm::scale(model, glm::vec3(0.2f));
 				//Apply the model matrix to the shader
 				(*gShaders)[2].SetMat4("model", model);
+
+				//Adjust the light color over time
+				glm::vec3 lightColor{};
+				lightColor.x = sin(timeValue * 0.2f * 2.0f);
+				lightColor.y = sin(timeValue * 0.2f * 0.7f);
+				lightColor.z = sin(timeValue * 0.2f * 1.3f);
+
+				//Calculate the different light type colors
+				glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
+				glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
+
+				//Update the light color uniforms for the light source shader
+				(*gShaders)[2].SetVec3("lightColor", lightColor);
 
 				//Bind the light source VAO
 				glBindVertexArray(gVAOs[1]);
@@ -256,7 +276,12 @@ int main(int argc, char* args[])
 				(*gShaders)[1].Use();
 
 				//Update the light position uniform
-				(*gShaders)[1].SetVec3("lightPos", gLightPos);
+				(*gShaders)[1].SetVec3("light.position", gLight.position);
+
+				//Update the light color uniforms
+				(*gShaders)[1].SetVec3("light.ambient", ambientColor);
+				(*gShaders)[1].SetVec3("light.diffuse", diffuseColor);
+				(*gShaders)[1].SetVec3("light.specular", lightColor);
 
 				//Apply the transformation matrices to the object shader
 				(*gShaders)[1].SetMat4("view", view);
@@ -517,7 +542,12 @@ bool initGL()
 	});
 
 	//Define the light position
-	gLightPos = glm::vec3(1.2f, 1.0f, 2.0f);
+	gLight.position = glm::vec3(1.2f, 1.0f, 2.0f);
+
+	//Define the light colors
+	gLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+	gLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
+	gLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 
 	//Return the success flag
 	return success;
@@ -607,17 +637,21 @@ bool loadMedia()
 	(*gShaders)[1].SetInt("texture1", 0);
 	(*gShaders)[1].SetInt("texture2", 1);
 
-	//Set the color uniforms for the light on the objects
-	(*gShaders)[1].SetVec3("objectColor", glm::vec3(1.0f, 0.5f, 0.31f));
-	(*gShaders)[1].SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-	(*gShaders)[1].SetVec3("lightPos", gLightPos);
-	(*gShaders)[1].SetVec3("viewPos", gCamera->position);
-	(*gShaders)[1].SetFloat("ambientStrength", 0.1f);
-	(*gShaders)[1].SetFloat("specularStrength", 0.5f);
+	//Set the color uniforms for the light on the objects to jade material
+	(*gShaders)[1].SetVec3("material.ambient", glm::vec3(0.135f, 0.2225f, 0.1575f));
+	(*gShaders)[1].SetVec3("material.diffuse", glm::vec3(0.54f, 0.89f, 0.63f));
+	(*gShaders)[1].SetVec3("material.specular", glm::vec3(0.316228f, 0.316228f, 0.316228f));
+	(*gShaders)[1].SetFloat("material.shininess", 0.1 * 128.0f);
+
+	//Set color uniforms for the light source
+	(*gShaders)[1].SetVec3("light.position", gLight.position);
+	(*gShaders)[1].SetVec3("light.ambient", gLight.ambient);
+	(*gShaders)[1].SetVec3("light.diffuse", gLight.diffuse);
+	(*gShaders)[1].SetVec3("light.specular", gLight.specular);
 
 	//Set the color uniforms for the light source
 	(*gShaders)[2].Use();
-	(*gShaders)[2].SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+	(*gShaders)[2].SetVec3("lightColor", gLight.specular);
 
 	//Return the success flag
 	return success;
