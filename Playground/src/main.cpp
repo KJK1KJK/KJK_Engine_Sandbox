@@ -205,7 +205,7 @@ int main(int argc, char* args[])
 				}
 
 				//Set the clear color
-				glClearColor(0.4f, 0.f, 0.4f, 1.0f);
+				glClearColor(0.2f, 0.f, 0.2f, 1.0f);
 				//Clear the color buffer
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -215,48 +215,18 @@ int main(int argc, char* args[])
 				//Calculate the time value
 				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
 
-				//Use the defined shader program
-				(*gShaders)[1].Use();
-
 				//Bind the textures
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, gTextures[0]);
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
 				
-				//Define a view matrix for the square
+				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
 
-				//Define a projection matrix for the square
+				//Define a projection matrix
 				glm::mat4 projection = glm::mat4(1.0f);
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
-
-				//Apply the transformation matrices to the shader
-				(*gShaders)[1].SetMat4("view", view);
-				(*gShaders)[1].SetMat4("projection", projection);
-
-				//Bind the first VAO
-				glBindVertexArray(gVAOs[0]);
-
-				//Iterate over cube position to draw 10 cubes
-				for (GLuint i = 0; i < 10; i++)
-				{
-					//Define a model matrix for the square and move each cube to the correct position
-					glm::mat4 model = glm::mat4(1.0f);
-					model = glm::translate(model, (*gCubePositions)[i]);
-
-					//Calculate the angle based on the i value
-					float angle = 20.0f * (i+1);
-
-					//Rotate the cube over time
-					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-
-					//Apply the model matrix to the shader
-					(*gShaders)[1].SetMat4("model", model);
-
-					//Draw a square
-					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-				}
 
 				//Switch to the light source shader
 				(*gShaders)[2].Use();
@@ -264,6 +234,10 @@ int main(int argc, char* args[])
 				//Apply the transformation matrices to the shader
 				(*gShaders)[2].SetMat4("view", view);
 				(*gShaders)[2].SetMat4("projection", projection);
+
+				//Move the lightning source on an orbit
+				gLightPos.x = 10.5f * sin(timeValue);
+				gLightPos.z = 10.5f * cos(timeValue);
 
 				//Set the model matrix for the light source cube
 				glm::mat4 model = glm::mat4(1.0f);
@@ -277,6 +251,39 @@ int main(int argc, char* args[])
 				glBindVertexArray(gVAOs[1]);
 				//Draw the light source cube
 				glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+
+				//Use the defined shader program for the objects
+				(*gShaders)[1].Use();
+
+				//Update the light position uniform
+				(*gShaders)[1].SetVec3("lightPos", gLightPos);
+
+				//Apply the transformation matrices to the object shader
+				(*gShaders)[1].SetMat4("view", view);
+				(*gShaders)[1].SetMat4("projection", projection);
+
+				//Bind the cube VAO
+				glBindVertexArray(gVAOs[0]);
+
+				//Iterate over cube position to draw 10 objects that rotate
+				for (GLuint i = 0; i < 10; i++)
+				{
+					//Define a model matrix for the object and move each to the correct position
+					glm::mat4 model = glm::mat4(1.0f);
+					model = glm::translate(model, (*gCubePositions)[i]);
+
+					//Calculate the angle based on the i value
+					float angle = 20.0f * (i+1);
+
+					//Rotate the object over time
+					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+
+					//Apply the model matrix to the object shader
+					(*gShaders)[1].SetMat4("model", model);
+
+					//Draw an object
+					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				}
 
 				//Unbind the VAO
 				glBindVertexArray(0);
@@ -386,37 +393,37 @@ bool initGL()
 	//Set of vertices for a cube
 	GLfloat vertices[] =
 	{
-		//Vertex Positions   //Colors           //Texture Coordinates
+		//Vertex Positions     //Colors           //Texture    //Normal
 		//Front side
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
-		-0.5f, -0.5f,  0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
-		//Back Side
-		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
-		-0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   //Top Left
-		//Left Side
-		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
-		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
-		-0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
-		//Right Side
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
-		 0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   //Top Left
-		//Top Side
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  //Bottom Right
-	    -0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  //Top Left
-	    //Bottom Side
-		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,  //Bottom Right
-	    -0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,  //Bottom Left
-	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f   //Top Left
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,   0.0f,  0.0f,  1.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Right
+		-0.5f, -0.5f,  0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Left
+		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,   0.0f,  0.0f,  1.0f,  //Top Left
+		//Back Side											     	   
+		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   0.0f,  0.0f, -1.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Right
+		-0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Left
+		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   0.0f,  0.0f, -1.0f,   //Top Left
+		//Left Side											     	   
+		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  -1.0f,  0.0f,  0.0f,  //Top Right
+		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Right
+		-0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Left
+		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  -1.0f,  0.0f,  0.0f,  //Top Left
+		//Right Side										     	   
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   1.0f,  0.0f,  0.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Right
+		 0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Left
+		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   1.0f,  0.0f,  0.0f,   //Top Left
+		//Top Side											     
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,   0.0f,  1.0f,  0.0f,  //Top Right
+		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Right
+	    -0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Left
+	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,   0.0f,  1.0f,  0.0f,  //Top Left
+	    //Bottom Side										     			 
+		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   0.0f, -1.0f,  0.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Right
+	    -0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Left
+	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   0.0f, -1.0f,  0.0f   //Top Left
 	};
 	GLuint indices[] =
 	{
@@ -448,14 +455,17 @@ bool initGL()
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
 	//Inform OpenGL how to interpret the vertex data
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
+
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+	glEnableVertexAttribArray(3);
 
 	//Set of vertices for a triangle
 	GLfloat vertices2[] =
@@ -479,14 +489,17 @@ bool initGL()
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
 
 	//Inform OpenGL how to interpret the vertex data for a light object
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
+
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+	glEnableVertexAttribArray(3);
 
 	//Define positions to draw the cubes to
 	gCubePositions.emplace(std::array<glm::vec3, 10>
@@ -519,8 +532,8 @@ bool loadMedia()
 	gShaders.emplace(std::array<Shader, 3>
 	{
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
-			Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
-			Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
+		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
 	});
 
 	//Load the wood container texture
@@ -597,6 +610,10 @@ bool loadMedia()
 	//Set the color uniforms for the light on the objects
 	(*gShaders)[1].SetVec3("objectColor", glm::vec3(1.0f, 0.5f, 0.31f));
 	(*gShaders)[1].SetVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+	(*gShaders)[1].SetVec3("lightPos", gLightPos);
+	(*gShaders)[1].SetVec3("viewPos", gCamera->position);
+	(*gShaders)[1].SetFloat("ambientStrength", 0.1f);
+	(*gShaders)[1].SetFloat("specularStrength", 0.5f);
 
 	//Set the color uniforms for the light source
 	(*gShaders)[2].Use();
