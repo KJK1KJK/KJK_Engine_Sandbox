@@ -19,7 +19,7 @@ public:
 	//Scroll sensitivity
 	const float scrollSensitivity{ 2.0f };
 	//Field of View
-	float fov{ 45.0f };
+	float fov{ 85.0f };
 
 	//Constructor that sets the starting position and looks at the origin
 	Camera(const glm::vec3& startPosition);

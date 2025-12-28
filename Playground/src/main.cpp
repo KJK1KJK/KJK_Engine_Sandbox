@@ -14,6 +14,8 @@ bool init();
 bool initGL();
 //Loads media
 bool loadMedia();
+//Load a texture from file
+bool loadTexture(const std::string& path, GLuint& textureID);
 //Cleans up and closes SDL and all used objects
 void close();
 
@@ -36,7 +38,7 @@ GLuint gEBOs[2];
 std::optional<std::array<Shader, 3>> gShaders;
 
 //Texture ID
-GLuint gTextures[2];
+GLuint gTextures[3];
 
 //Cube positions
 std::optional<std::array<glm::vec3, 10>> gCubePositions;
@@ -110,17 +112,17 @@ int main(int argc, char* args[])
 			//While application is running
 			while (!quit)
 			{
+				//Calculate delta time
+				float currentFrame = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+				deltaTime = currentFrame - lastFrame;
+				lastFrame = currentFrame;
+
+				//Get keyboard state
+				const bool* keyState = SDL_GetKeyboardState(NULL);
+
 				//Handle events on queue
 				while (SDL_PollEvent(&e) != 0)
 				{
-					//Calculate delta time
-					float currentFrame = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-					deltaTime = currentFrame - lastFrame;
-					lastFrame = currentFrame;
-
-					//Get keyboard state
-					const bool* keyState = SDL_GetKeyboardState(NULL);
-
 					//User requests quit
 					if (e.type == SDL_EVENT_QUIT)
 					{
@@ -207,9 +209,12 @@ int main(int argc, char* args[])
 						}
 					}
 
-					//Handle camera movement input
-					gCamera->HandleInput(e, deltaTime, mouseCaptured, keyState);
+					//Handle camera mouse and keyboard input
+					gCamera->HandleInput(e, deltaTime, mouseCaptured, nullptr);
 				}
+
+				//Handle camera keystate input
+				gCamera->HandleInput(SDL_Event{}, deltaTime, mouseCaptured, keyState);
 
 				//Set the clear color
 				glClearColor(0.2f, 0.f, 0.2f, 1.0f);
@@ -221,12 +226,6 @@ int main(int argc, char* args[])
 
 				//Calculate the time value
 				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-
-				//Bind the textures
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, gTextures[0]);
-				glActiveTexture(GL_TEXTURE1);
-				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
@@ -243,8 +242,8 @@ int main(int argc, char* args[])
 				(*gShaders)[2].SetMat4("projection", projection);
 
 				//Move the lightning source on an orbit
-				gLight.position.x = 10.5f * sin(0.35f * timeValue);
-				gLight.position.z = 10.5f * cos(0.35f * timeValue);
+				gLight.position.x = 10.5f * sin(0.2f * timeValue);
+				gLight.position.z = 10.5f * cos(0.2f * timeValue);
 
 				//Set the model matrix for the light source cube
 				glm::mat4 model = glm::mat4(1.0f);
@@ -256,9 +255,9 @@ int main(int argc, char* args[])
 
 				//Adjust the light color over time
 				glm::vec3 lightColor{};
-				lightColor.x = sin(timeValue * 0.2f * 2.0f);
-				lightColor.y = sin(timeValue * 0.2f * 0.7f);
-				lightColor.z = sin(timeValue * 0.2f * 1.3f);
+				lightColor.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
+				lightColor.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
+				lightColor.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
 
 				//Calculate the different light type colors
 				glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
@@ -282,6 +281,14 @@ int main(int argc, char* args[])
 				(*gShaders)[1].SetVec3("light.ambient", ambientColor);
 				(*gShaders)[1].SetVec3("light.diffuse", diffuseColor);
 				(*gShaders)[1].SetVec3("light.specular", lightColor);
+
+				//Bind the crate texture
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, gTextures[0]);
+
+				//Bind the metal frame texture
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
 
 				//Apply the transformation matrices to the object shader
 				(*gShaders)[1].SetMat4("view", view);
@@ -420,35 +427,35 @@ bool initGL()
 	{
 		//Vertex Positions     //Colors           //Texture    //Normal
 		//Front side
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,   0.0f,  0.0f,  1.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Right
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,   0.0f,  0.0f,  1.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Right
 		-0.5f, -0.5f,  0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Left
-		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,   0.0f,  0.0f,  1.0f,  //Top Left
+		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,   0.0f,  0.0f,  1.0f,  //Top Left
 		//Back Side											     	   
-		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   0.0f,  0.0f, -1.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Right
+		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   0.0f,  0.0f, -1.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Right
 		-0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   0.0f,  0.0f, -1.0f,   //Top Left
+		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   0.0f,  0.0f, -1.0f,   //Top Left
 		//Left Side											     	   
-		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,  -1.0f,  0.0f,  0.0f,  //Top Right
-		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Right
+		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,  -1.0f,  0.0f,  0.0f,  //Top Right
+		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Right
 		-0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,  -1.0f,  0.0f,  0.0f,  //Top Left
+		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,  -1.0f,  0.0f,  0.0f,  //Top Left
 		//Right Side										     	   
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   1.0f,  0.0f,  0.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Right
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   1.0f,  0.0f,  0.0f,  //Top Right
+		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Right
 		 0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Left
-		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   1.0f,  0.0f,  0.0f,   //Top Left
+		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   1.0f,  0.0f,  0.0f,   //Top Left
 		//Top Side											     
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  2.0f, 2.0f,   0.0f,  1.0f,  0.0f,  //Top Right
-		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  2.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Right
+		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,   0.0f,  1.0f,  0.0f,  //Top Right
+		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Right
 	    -0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Left
-	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 2.0f,   0.0f,  1.0f,  0.0f,  //Top Left
+	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,   0.0f,  1.0f,  0.0f,  //Top Left
 	    //Bottom Side										     			 
-		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  2.0f, 2.0f,   0.0f, -1.0f,  0.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  2.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Right
+		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   0.0f, -1.0f,  0.0f,  //Top Right
+		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Right
 	    -0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Left
-	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 2.0f,   0.0f, -1.0f,  0.0f   //Top Left
+	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   0.0f, -1.0f,  0.0f   //Top Left
 	};
 	GLuint indices[] =
 	{
@@ -566,82 +573,23 @@ bool loadMedia()
 		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
 	});
 
-	//Load the wood container texture
-	SDL_Surface* containerSurface = IMG_Load("assets/container.jpg");
-	if (containerSurface == nullptr)
-	{
-		KJK_ERROR("Failed to load texture image: {0}", SDL_GetError());
-		success = false;
-	}
-	else
-	{
-		//Generate a texture
-		glGenTextures(1, &gTextures[0]);
-		//Bind the texture
-		glBindTexture(GL_TEXTURE_2D, gTextures[0]);
+	//Load the crate container texture
+	loadTexture("assets/container2.png", gTextures[0]);
 
-		//Generate the texture using the loaded surface data
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, containerSurface->w, containerSurface->h, 0, GL_RGB, GL_UNSIGNED_BYTE, containerSurface->pixels);
+	//Load the metal frame for the container texture
+	loadTexture("assets/container2_specular.png", gTextures[1]);
 
-		//Set the texture wrapping/filtering parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	//Load the matrix texture
+	loadTexture("assets/matrix.jpg", gTextures[2]);
 
-		//Generate mipmaps
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		//Free the loaded surface
-		SDL_DestroySurface(containerSurface);
-	}
-
-	//Load the wood container texture
-	SDL_Surface* faceSurface = IMG_Load("assets/awesomeface.png");
-	if (faceSurface == nullptr)
-	{
-		KJK_ERROR("Failed to load texture image: {0}", SDL_GetError());
-		success = false;
-	}
-	else
-	{
-		//Flip the surface vertically
-		if (!SDL_FlipSurface(faceSurface, SDL_FLIP_VERTICAL))
-		{
-			KJK_ERROR("Failed to flip surface: {0}", SDL_GetError());
-		}
-
-		//Generate a texture
-		glGenTextures(1, &gTextures[1]);
-		//Bind the texture
-		glBindTexture(GL_TEXTURE_2D, gTextures[1]);
-
-		//Generate the texture using the loaded surface data
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, faceSurface->w, faceSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, faceSurface->pixels);
-
-		//Set the texture wrapping/filtering parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		//Generate mipmaps
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		//Free the loaded surface
-		SDL_DestroySurface(faceSurface);
-	}
-
-	//Set the texture uniforms
+	//Use the cube shader program
 	(*gShaders)[1].Use();
-	(*gShaders)[1].SetInt("texture1", 0);
-	(*gShaders)[1].SetInt("texture2", 1);
 
-	//Set the color uniforms for the light on the objects to jade material
-	(*gShaders)[1].SetVec3("material.ambient", glm::vec3(0.135f, 0.2225f, 0.1575f));
-	(*gShaders)[1].SetVec3("material.diffuse", glm::vec3(0.54f, 0.89f, 0.63f));
-	(*gShaders)[1].SetVec3("material.specular", glm::vec3(0.316228f, 0.316228f, 0.316228f));
-	(*gShaders)[1].SetFloat("material.shininess", 0.1 * 128.0f);
+	//Set the texture and color uniforms for the light on the objects
+	(*gShaders)[1].SetInt("material.diffuse", 0);
+	(*gShaders)[1].SetInt("material.specular", 1);
+	(*gShaders)[1].SetInt("material.emission", 2);
+	(*gShaders)[1].SetFloat("material.shininess", 64.0f);
 
 	//Set color uniforms for the light source
 	(*gShaders)[1].SetVec3("light.position", gLight.position);
@@ -657,6 +605,61 @@ bool loadMedia()
 	return success;
 }
 
+//Load a texture from a file
+bool loadTexture(const std::string& path, GLuint& textureID)
+{
+	//Loading success flag
+	bool success = true;
+
+	//Load the texture image
+	SDL_Surface* surface = IMG_Load(path.c_str());
+	if (surface == nullptr)
+	{
+		KJK_ERROR("Failed to load texture image: {0}", SDL_GetError());
+		success = false;
+	}
+	else
+	{
+		//Generate a texture
+		glGenTextures(1, &textureID);
+		//Bind the texture
+		glBindTexture(GL_TEXTURE_2D, textureID);
+
+		//Convert the surface to a standard format
+		SDL_Surface* formattedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+
+		//Free the original surface
+		SDL_DestroySurface(surface);
+
+		//Check if the conversion was successful
+		if (formattedSurface == nullptr)
+		{
+			KJK_ERROR("Failed to convert surface to standard format: {0}", SDL_GetError());
+			success = false;
+		}
+		else
+		{
+			//Generate the texture using the loaded surface data
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, formattedSurface->w, formattedSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, formattedSurface->pixels);
+
+			//Set the texture wrapping/filtering parameters
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+			//Generate mipmaps
+			glGenerateMipmap(GL_TEXTURE_2D);
+
+			//Free the formatted surface
+			SDL_DestroySurface(formattedSurface);
+		}
+	}
+
+	//Return the success flag
+	return success;
+}
+
 //Cleans up and closes SDL and all used objects
 void close()
 {
@@ -666,7 +669,7 @@ void close()
 	glDeleteBuffers(2, gEBOs);
 	
 	//Destroy texture
-	glDeleteTextures(2, gTextures);
+	glDeleteTextures(3, gTextures);
 
 	//Delete the camera
 	delete gCamera;

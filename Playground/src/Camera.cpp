@@ -95,21 +95,29 @@ void Camera::HandleInput(const SDL_Event& e, float deltaTime, bool isMouseCaptur
 	//Handle continuous keyboard state for smoother movement
 	if (keyboardState)
 	{
-		if (keyboardState[SDL_SCANCODE_W])
+		if(keyboardState[SDL_SCANCODE_W]) //Move forwards
 		{
 			position += direction * speed * deltaTime;
 		}
-		if (keyboardState[SDL_SCANCODE_S])
+		if(keyboardState[SDL_SCANCODE_S]) //Move backwards
 		{
 			position -= direction * speed * deltaTime;
 		}
-		if (keyboardState[SDL_SCANCODE_A])
+		if(keyboardState[SDL_SCANCODE_A]) //Move left
 		{
 			position -= right * speed * deltaTime;
 		}
-		if (keyboardState[SDL_SCANCODE_D])
+		if(keyboardState[SDL_SCANCODE_D]) //Move right
 		{
 			position += right * speed * deltaTime;
+		}
+		if(keyboardState[SDL_SCANCODE_LSHIFT]) //Move down
+		{
+			position -= glm::vec3(0.0f, 1.0f, 0.0f) * speed * deltaTime;
+		}
+		if(keyboardState[SDL_SCANCODE_SPACE]) //Move up
+		{
+			position += glm::vec3(0.0f, 1.0f, 0.0f) * speed * deltaTime;
 		}
 	}
 }
