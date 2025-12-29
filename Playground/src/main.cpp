@@ -4,6 +4,8 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Model.h"
+#include "CubeModel.h"
+#include "PlaneModel.h"
 
 #include <SDL3/SDL_main.h>
 
@@ -46,11 +48,19 @@ struct Light
 
 //Directional light object
 Light gDirectionalLight;
-//Point light object
+//Spotlight object
 Light gSpotLight;
+//Point lights array
+std::array<Light, 1> gPointLights;
 
 //Model object
 Model* gModel;
+
+//Cube model objects
+CubeModel* gCubeModels;
+
+//Plane model object
+PlaneModel* gPlaneModel;
 
 //The main function
 int main(int argc, char* args[])
@@ -164,18 +174,18 @@ int main(int argc, char* args[])
 						case SDLK_F: //Toggle flashlight
 							flashlightEnabled = !flashlightEnabled;
 
-							(*gShaders)[0].Use();
+							(*gShaders)[1].Use();
 							if(flashlightEnabled)
 							{
-								(*gShaders)[0].SetVec3("spotLight.ambient", gSpotLight.ambient);
-								(*gShaders)[0].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-								(*gShaders)[0].SetVec3("spotLight.specular", gSpotLight.specular);
+								(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
+								(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+								(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
 							}
 							else
 							{
-								(*gShaders)[0].SetVec3("spotLight.ambient", glm::vec3(0.0f));
-								(*gShaders)[0].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
-								(*gShaders)[0].SetVec3("spotLight.specular", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec3("spotLight.ambient", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec3("spotLight.specular", glm::vec3(0.0f));
 							}
 							break;
 						case SDLK_UP: //Increase the appropriate value
@@ -253,7 +263,7 @@ int main(int argc, char* args[])
 				}
 
 				//Enable the shader for the model
-				(*gShaders)[0].Use();
+				(*gShaders)[1].Use();
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
@@ -263,25 +273,20 @@ int main(int argc, char* args[])
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
 				//Update the spotlight position and direction uniforms
-				(*gShaders)[0].Use();
-				(*gShaders)[0].SetVec3("spotLight.position", gCamera->position);
-				(*gShaders)[0].SetVec3("spotLight.direction", gCamera->direction);
+				(*gShaders)[1].Use();
+				(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
+				(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
 
 				//Update the view and projection matrices in the shader
-				(*gShaders)[0].SetMat4("view", view);
-				(*gShaders)[0].SetMat4("projection", projection);
+				(*gShaders)[1].SetMat4("view", view);
+				(*gShaders)[1].SetMat4("projection", projection);
 
-				//Define the model matrix
-				glm::mat4 model = glm::mat4(1.0f);
-				model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-				//Scale the model down
-				model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
-
-				//Update the model matrix in the shader
-				(*gShaders)[0].SetMat4("model", model);
-
-				//Render the model
-				gModel->Draw((*gShaders)[0]);
+				//Render the objects
+				for (int i = 0; i < 2; ++i)
+				{
+					gCubeModels[i].Draw((*gShaders)[1]);
+				}
+				gPlaneModel->Draw((*gShaders)[1]);
 
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
@@ -399,6 +404,12 @@ bool initGL()
 	gSpotLight.diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
 	gSpotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 
+	//Define the point lights properties
+	gPointLights[0].position = glm::vec3(10.0f, 10.5f, 10.0f);
+	gPointLights[0].ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+	gPointLights[0].diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
+	gPointLights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
 	KJK_INFO("Initialized OpenGL!");
 
 	//Return the success flag
@@ -418,29 +429,56 @@ bool loadMedia()
 		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
 	});
 
-	//Load the model from a file
-	gModel = new Model("assets/backpack/backpack.obj");
+	//Load two cube models
+	gCubeModels = new CubeModel[2]
+	{
+		CubeModel("assets/marble.jpg", "assets/marble.jpg"),
+		CubeModel("assets/marble.jpg", "assets/marble.jpg")
+	};
+	//Set the positions of the cube models
+	gCubeModels[0].setPosition(glm::vec3(-1.0f, 0.0f, -1.0f));
+	gCubeModels[1].setPosition(glm::vec3(2.0f, 0.0f, 0.0f));
+
+	//Load the plane model
+	gPlaneModel = new PlaneModel("assets/metal.png", "assets/metal.png");
+	//Set the position of the plane model
+	gPlaneModel->setPosition(glm::vec3(0.0f, -0.5f, 0.0f));
+	//Set the scale of the plane model
+	gPlaneModel->setScale(glm::vec3(5.0f, 1.0f, 5.0f));
 
 	//Use the first shader program
-	(*gShaders)[0].Use();
+	(*gShaders)[1].Use();
 
 	//Set color uniforms for the spotlight
-	(*gShaders)[0].SetVec3("spotLight.ambient", gSpotLight.ambient);
-	(*gShaders)[0].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-	(*gShaders)[0].SetVec3("spotLight.specular", gSpotLight.specular);
+	(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
+	(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+	(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
 	//Set spotlight cutoff angles
-	(*gShaders)[0].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-	(*gShaders)[0].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
+	(*gShaders)[1].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+	(*gShaders)[1].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
 	//Set spotlight attenuation factors
-	(*gShaders)[0].SetFloat("spotLight.constant", 1.0f);
-	(*gShaders)[0].SetFloat("spotLight.linear", 0.045f);
-	(*gShaders)[0].SetFloat("spotLight.quadratic", 0.0075f);
+	(*gShaders)[1].SetFloat("spotLight.constant", 1.0f);
+	(*gShaders)[1].SetFloat("spotLight.linear", 0.045f);
+	(*gShaders)[1].SetFloat("spotLight.quadratic", 0.0075f);
 
 	//Set color uniforms for the directional light
-	(*gShaders)[0].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-	(*gShaders)[0].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
-	(*gShaders)[0].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
-	(*gShaders)[0].SetVec3("dirLight.specular", gDirectionalLight.specular);
+	(*gShaders)[1].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+	(*gShaders)[1].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
+	(*gShaders)[1].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
+	(*gShaders)[1].SetVec3("dirLight.specular", gDirectionalLight.specular);
+
+	//Set color uniforms for the point light
+	(*gShaders)[1].SetVec3("pointLights[0].position", gPointLights[0].position);
+	(*gShaders)[1].SetVec3("pointLights[0].ambient", gPointLights[0].ambient);
+	(*gShaders)[1].SetVec3("pointLights[0].diffuse", gPointLights[0].diffuse);
+	(*gShaders)[1].SetVec3("pointLights[0].specular", gPointLights[0].specular);
+	//Set point light attenuation factors
+	(*gShaders)[1].SetFloat("pointLights[0].constant", 1.0f);
+	(*gShaders)[1].SetFloat("pointLights[0].linear", 0.09f);
+	(*gShaders)[1].SetFloat("pointLights[0].quadratic", 0.032f);
+
+	//Set material shininess
+	(*gShaders)[1].SetFloat("material.shininess", 32.0f);
 
 	KJK_INFO("Loaded media!");
 
@@ -456,6 +494,12 @@ void close()
 
 	//Delete the model
 	delete gModel;
+
+	//Delete the cube models
+	delete[] gCubeModels;
+
+	//Delete the plane model
+	delete gPlaneModel;
 
 	//Destroy window
 	if (gWindow != nullptr)

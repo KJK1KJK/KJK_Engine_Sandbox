@@ -1,5 +1,6 @@
 #include "Model.h"
 #include <KJK_Engine/Core/Logger.h>
+#include "CubeModel.h"
 
 Model::Model(const std::string& path)
 {

@@ -2,15 +2,14 @@
 
 out vec4 FragColor;
 
-in vec3 normal;
 in vec3 fragPos;
+in vec3 normal;
 in vec2 texCoords;
 
 struct Material
 {
 	sampler2D diffuse;
 	sampler2D specular;
-	sampler2D emission;
 	float shininess;
 };
 uniform Material material;
@@ -38,7 +37,7 @@ struct PointLight
 	float linear;
 	float quadratic;
 };
-#define NR_POINT_LIGHTS 4
+#define NR_POINT_LIGHTS 1
 in PointLight pointLightsView[NR_POINT_LIGHTS];
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
@@ -78,11 +77,6 @@ void main()
 
 	//Apply spotlight lighting
 	result += CalcSpotLight(spotLightView, norm, fragPos, viewDir);
-
-	//Calculate emission and apply it
-	vec3 emis = texture(material.emission, texCoords).rgb;
-	vec3 emission = emis * smoothstep(0.899999999, 0.9, vec3(1.0) - texture(material.specular, texCoords).rgb);
-	result += emission;
 
 	//Set the final fragment color
 	FragColor = vec4(result, 1.0);
