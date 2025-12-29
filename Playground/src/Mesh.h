@@ -21,6 +21,11 @@ struct Texture
 	std::string path; //File path of the texture
 };
 
+struct Material
+{
+	float shininess = 32.0f; //Shininess factor
+};
+
 class Mesh
 {
 public:
@@ -28,9 +33,20 @@ public:
 	std::vector<Vertex> vertices;
 	std::vector<GLuint> indices;
 	std::vector<Texture> textures;
+	Material material;
 
-	//Constructor
-	Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices, const std::vector<Texture>& textures);
+	//Initializes vectors and calls setupMesh
+	Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices, const std::vector<Texture>& textures, const Material& material);
+
+	~Mesh();
+
+	//Delete copy semantics
+	Mesh(const Mesh& other) = delete;
+	Mesh& operator=(const Mesh& other) = delete;
+
+	//Allow move semantics
+	Mesh(Mesh&& other) noexcept;
+	Mesh& operator=(Mesh&& other) noexcept;
 
 	//Render the mesh
 	void Draw(const Shader& shader) const;

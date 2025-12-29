@@ -1,9 +1,73 @@
 #include "Mesh.h"
 
-Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices, const std::vector<Texture>& textures)
-	: vertices(vertices), indices(indices), textures(textures)
+Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices, const std::vector<Texture>& textures, const Material& material)
+	: vertices(vertices), indices(indices), textures(textures), material(material)
 {
 	setupMesh();
+}
+
+Mesh::~Mesh()
+{
+	//Delete the buffers/arrays
+	if (mVAO != 0)
+		glDeleteVertexArrays(1, &mVAO);
+	if (mVBO != 0)
+		glDeleteBuffers(1, &mVBO);
+	if (mEBO != 0)
+		glDeleteBuffers(1, &mEBO);
+
+	//Delete textures
+	for (const auto& texture : textures)
+	{
+		if (texture.id != 0)
+			glDeleteTextures(1, &texture.id);
+	}
+}
+
+Mesh::Mesh(Mesh&& other) noexcept
+	: vertices(std::move(other.vertices)), indices(std::move(other.indices)), textures(std::move(other.textures)), material(other.material), mVAO(other.mVAO), mVBO(other.mVBO), mEBO(other.mEBO)
+{
+	//Invalidate other's resources
+	other.mVAO = 0;
+	other.mVBO = 0;
+	other.mEBO = 0;
+}
+
+Mesh& Mesh::operator=(Mesh&& other) noexcept
+{
+	if(this != &other)
+	{
+		//Delete existing resources
+		if (mVAO != 0)
+			glDeleteVertexArrays(1, &mVAO);
+		if (mVBO != 0)
+			glDeleteBuffers(1, &mVBO);
+		if (mEBO != 0)
+			glDeleteBuffers(1, &mEBO);
+
+		//Delete textures
+		for (const auto& texture : textures)
+		{
+			if (texture.id != 0)
+				glDeleteTextures(1, &texture.id);
+		}
+
+		//Move data from other
+		vertices = std::move(other.vertices);
+		indices = std::move(other.indices);
+		textures = std::move(other.textures);
+		material = other.material;
+		mVAO = other.mVAO;
+		mVBO = other.mVBO;
+		mEBO = other.mEBO;
+
+		//Reset other
+		other.mVAO = 0;
+		other.mVBO = 0;
+		other.mEBO = 0;
+	}
+
+	return *this;
 }
 
 void Mesh::Draw(const Shader& shader) const
@@ -33,11 +97,14 @@ void Mesh::Draw(const Shader& shader) const
 			number = std::to_string(heightNr++);
 
 		//Set the sampler to the correct texture unit
-		shader.SetInt(("material." + name + number).c_str(), i);
+		shader.SetInt((name + number).c_str(), i);
 
 		//Bind the texture
 		glBindTexture(GL_TEXTURE_2D, textures[i].id);
 	}
+
+	//Set the material shininess uniform
+	shader.SetFloat("material.shininess", material.shininess);
 
 	//Set the active texture back to default
 	glActiveTexture(GL_TEXTURE0);

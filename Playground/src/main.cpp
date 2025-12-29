@@ -3,6 +3,7 @@
 
 #include "Shader.h"
 #include "Camera.h"
+#include "Model.h"
 
 #include <SDL3/SDL_main.h>
 
@@ -14,8 +15,6 @@ bool init();
 bool initGL();
 //Loads media
 bool loadMedia();
-//Load a texture from file
-bool loadTexture(const std::string& path, GLuint& textureID);
 //Cleans up and closes SDL and all used objects
 void close();
 
@@ -29,19 +28,8 @@ SDL_Window* gWindow = nullptr;
 //Context for OpenGL
 SDL_GLContext gContext;
 
-//OpenGl object IDs
-GLuint gVBOs[2];
-GLuint gVAOs[2];
-GLuint gEBOs[2];
-
 //Shader program ID
 std::optional<std::array<Shader, 3>> gShaders;
-
-//Texture ID
-GLuint gTextures[3];
-
-//Cube positions
-std::optional<std::array<glm::vec3, 10>> gCubePositions;
 
 //Camera object
 Camera* gCamera;
@@ -56,18 +44,17 @@ struct Light
 	glm::vec3 specular;
 };
 
-Light gLights[4];
-
+//Directional light object
 Light gDirectionalLight;
-
+//Point light object
 Light gSpotLight;
+
+//Model object
+Model* gModel;
 
 //The main function
 int main(int argc, char* args[])
 {
-	//Initialize the logging system
-	initLogger();
-
 	//Final exit code
 	int exitCode{ 0 };
 
@@ -177,18 +164,18 @@ int main(int argc, char* args[])
 						case SDLK_F: //Toggle flashlight
 							flashlightEnabled = !flashlightEnabled;
 
-							(*gShaders)[1].Use();
+							(*gShaders)[0].Use();
 							if(flashlightEnabled)
 							{
-								(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
-								(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-								(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
+								(*gShaders)[0].SetVec3("spotLight.ambient", gSpotLight.ambient);
+								(*gShaders)[0].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+								(*gShaders)[0].SetVec3("spotLight.specular", gSpotLight.specular);
 							}
 							else
 							{
-								(*gShaders)[1].SetVec3("spotLight.ambient", glm::vec3(0.0f));
-								(*gShaders)[1].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
-								(*gShaders)[1].SetVec3("spotLight.specular", glm::vec3(0.0f));
+								(*gShaders)[0].SetVec3("spotLight.ambient", glm::vec3(0.0f));
+								(*gShaders)[0].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
+								(*gShaders)[0].SetVec3("spotLight.specular", glm::vec3(0.0f));
 							}
 							break;
 						case SDLK_UP: //Increase the appropriate value
@@ -264,6 +251,9 @@ int main(int argc, char* args[])
 				{
 					timeValue += deltaTime;
 				}
+
+				//Enable the shader for the model
+				(*gShaders)[0].Use();
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
@@ -272,100 +262,26 @@ int main(int argc, char* args[])
 				glm::mat4 projection = glm::mat4(1.0f);
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
-				//Update the first light source position and color over time
-				if (enableMovement)
-				{
-					//Move the lightning source on an orbit
-					gLights[0].position.x = 10.5f * sin(0.2f * timeValue);
-					gLights[0].position.z = 10.5f * cos(0.2f * timeValue);
+				//Update the spotlight position and direction uniforms
+				(*gShaders)[0].Use();
+				(*gShaders)[0].SetVec3("spotLight.position", gCamera->position);
+				(*gShaders)[0].SetVec3("spotLight.direction", gCamera->direction);
 
-					//Adjust the light color over time
-					gLights[0].specular.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
-					gLights[0].specular.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
-					gLights[0].specular.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
+				//Update the view and projection matrices in the shader
+				(*gShaders)[0].SetMat4("view", view);
+				(*gShaders)[0].SetMat4("projection", projection);
 
-					//Calculate the different light type colors
-					gLights[0].diffuse = gLights[0].specular * glm::vec3(0.5f);
-					gLights[0].ambient = gLights[0].specular * glm::vec3(0.2f);
+				//Define the model matrix
+				glm::mat4 model = glm::mat4(1.0f);
+				model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
+				//Scale the model down
+				model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
 
-					//Use the defined shader program for the objects
-					(*gShaders)[1].Use();
+				//Update the model matrix in the shader
+				(*gShaders)[0].SetMat4("model", model);
 
-					//Update the light color uniforms
-					(*gShaders)[1].SetVec3("pointLights[0].ambient", gLights[0].ambient);
-					(*gShaders)[1].SetVec3("pointLights[0].diffuse", gLights[0].diffuse);
-					(*gShaders)[1].SetVec3("pointLights[0].specular", gLights[0].specular);
-				}
-
-				//Switch to the light source shader
-				(*gShaders)[2].Use();
-
-				//Apply the transformation matrices to the light object shader
-				(*gShaders)[2].SetMat4("view", view);
-				(*gShaders)[2].SetMat4("projection", projection);
-
-				//Bind the cube VAO
-				glBindVertexArray(gVAOs[0]);
-
-				//Iterate over all lights to draw their light source cubes
-				for (GLuint i = 0; i < 4; i++)
-				{
-					//Set the model matrix for the light source cube
-					glm::mat4 model = glm::mat4(1.0f);
-					model = glm::translate(model, gLights[i].position);
-					//Scale down the light source cube
-					model = glm::scale(model, glm::vec3(0.2f));
-					//Apply the model matrix to the shader
-					(*gShaders)[2].SetMat4("model", model);
-
-					//Update the light color uniform
-					(*gShaders)[2].SetVec3("lightColor", gLights[i].specular);
-
-					//Draw the light source cube
-					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-				}
-
-				//Use the defined shader program for the objects
-				(*gShaders)[1].Use();
-
-				//Bind the crate texture
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, gTextures[0]);
-
-				//Bind the metal frame texture
-				glActiveTexture(GL_TEXTURE1);
-				glBindTexture(GL_TEXTURE_2D, gTextures[1]);
-
-				//Apply the transformation matrices to the object shader
-				(*gShaders)[1].SetMat4("view", view);
-				(*gShaders)[1].SetMat4("projection", projection);
-
-				//Apply camera position changes to the spotlight uniform
-				(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
-				(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
-
-				//Iterate over cube position to draw 10 objects that rotate
-				for (GLuint i = 0; i < 10; i++)
-				{
-					//Define a model matrix for the object and move each to the correct position
-					glm::mat4 model = glm::mat4(1.0f);
-					model = glm::translate(model, (*gCubePositions)[i]);
-
-					//Calculate the angle based on the i value
-					float angle = 20.0f * (i + 1);
-
-					//Rotate the object over time
-					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-
-					//Apply the model matrix to the object shader
-					(*gShaders)[1].SetMat4("model", model);
-
-					//Draw an object
-					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-				}
-
-				//Unbind the VAO
-				glBindVertexArray(0);
+				//Render the model
+				gModel->Draw((*gShaders)[0]);
 
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
@@ -392,6 +308,9 @@ bool init()
 	//Initialize flag
 	bool success = true;
 
+	//Initialize the logging system
+	initLogger();
+
 	//Initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO) == NULL)
 	{
@@ -400,6 +319,8 @@ bool init()
 	}
 	else
 	{
+		KJK_INFO("Initialized SDL!");
+
 		//Use OpenGL 4.5 core
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
@@ -414,6 +335,8 @@ bool init()
 		}
 		else
 		{
+			KJK_INFO("Created an SDL window!");
+
 			//Create context
 			gContext = SDL_GL_CreateContext(gWindow);
 			if (gContext == NULL)
@@ -423,6 +346,8 @@ bool init()
 			}
 			else
 			{
+				KJK_INFO("Created an SDL context!");
+
 				//Set the mouse mode to relative
 				SDL_SetWindowRelativeMouseMode(gWindow, true);
 
@@ -459,176 +384,22 @@ bool initGL()
 	//Define the viewport dimensions
 	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	//Generate VAOs
-	glGenVertexArrays(2, gVAOs);
-	//Generate VBOs
-	glGenBuffers(2, gVBOs);
-	//Generate EBOs
-	glGenBuffers(2, gEBOs);
-
 	//Enable depth testing
 	glEnable(GL_DEPTH_TEST);
-
-	//Set of vertices for a cube
-	GLfloat vertices[] =
-	{
-		//Vertex Positions     //Colors           //Texture    //Normal
-		//Front side
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,   0.0f,  0.0f,  1.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Right
-		-0.5f, -0.5f,  0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f,  1.0f,  //Bottom Left
-		-0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,   0.0f,  0.0f,  1.0f,  //Top Left
-		//Back Side											     	   
-		 0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   0.0f,  0.0f, -1.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Right
-		-0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f,  0.0f, -1.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   0.0f,  0.0f, -1.0f,   //Top Left
-		//Left Side											     	   
-		-0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,  -1.0f,  0.0f,  0.0f,  //Top Right
-		-0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Right
-		-0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,  -1.0f,  0.0f,  0.0f,  //Bottom Left
-		-0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,  -1.0f,  0.0f,  0.0f,  //Top Left
-		//Right Side										     	   
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   1.0f,  0.0f,  0.0f,  //Top Right
-		 0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Right
-		 0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   1.0f,  0.0f,  0.0f,  //Bottom Left
-		 0.5f,  0.5f, -0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   1.0f,  0.0f,  0.0f,   //Top Left
-		//Top Side											     
-		 0.5f,  0.5f,  0.5f,   1.0f, 0.0f, 0.0f,  1.0f, 1.0f,   0.0f,  1.0f,  0.0f,  //Top Right
-		 0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,  1.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Right
-	    -0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,  0.0f, 0.0f,   0.0f,  1.0f,  0.0f,  //Bottom Left
-	    -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,  0.0f, 1.0f,   0.0f,  1.0f,  0.0f,  //Top Left
-	    //Bottom Side										     			 
-		 0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,  1.0f, 1.0f,   0.0f, -1.0f,  0.0f,  //Top Right
-		 0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 1.0f,  1.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Right
-	    -0.5f, -0.5f, -0.5f,   1.0f, 1.0f, 1.0f,  0.0f, 0.0f,   0.0f, -1.0f,  0.0f,  //Bottom Left
-	    -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.5f,  0.0f, 1.0f,   0.0f, -1.0f,  0.0f   //Top Left
-	};
-	GLuint indices[] =
-	{
-		 0,  1,  2,  //First Front Triangle
-		 0,  2,  3,  //Second Front Triangle
-		 4,  5,  6,  //First Back Triangle
-		 4,  6,  7,  //Second Back Triangle
-		 8,  9, 10,  //First Left Triangle
-		 8, 10, 11,  //Second Left Triangle
-		12, 13, 14,  //First Right Triangle
-		12, 14, 15,  //Second Right Triangle
-		16, 17, 18,  //First Top Triangle
-		16, 18, 19,  //Second Top Triangle
-		20, 21, 22,  //First Bottom Triangle
-		20, 22, 23   //Second Bottom Triangle
-	};
-
-	//Bind VAO
-	glBindVertexArray(gVAOs[0]);
-
-	//Bind VBO
-	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[0]);
-	//Fill VBO with vertex data
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	//Bind EBO
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
-	//Fill EBO with index data
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	//Inform OpenGL how to interpret the vertex data
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
-
-	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
-	glEnableVertexAttribArray(3);
-
-	//Set of vertices for a triangle
-	GLfloat vertices2[] =
-	{
-		 0.5f,  0.5f, 0.0f,   //Top Right
-		 0.5f, -0.5f, 0.0f,   //Bottom Right
-		-0.5f,  0.5f, 0.0f,   //Top Left
-	};
-	GLuint indices2[] =
-	{
-		0, 1, 2
-	};
-
-	//Bind VAO for a light object
-	glBindVertexArray(gVAOs[1]);
-
-	//Bind VBO for a light object
-	glBindBuffer(GL_ARRAY_BUFFER, gVBOs[0]);
-
-	//Bind EBO for a light object
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBOs[0]);
-
-	//Inform OpenGL how to interpret the vertex data for a light object
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
-
-	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
-	glEnableVertexAttribArray(3);
-
-	//Define positions to draw the cubes to
-	gCubePositions.emplace(std::array<glm::vec3, 10>
-	{
-		glm::vec3( 0.0f,  0.0f,  0.0f),
-		glm::vec3( 2.0f,  5.0f, -15.0f),
-		glm::vec3(-1.5f, -2.2f, -2.5f),
-		glm::vec3(-3.8f, -2.0f, -12.3f),
-		glm::vec3( 2.4f, -0.4f, -3.5f),
-		glm::vec3(-1.7f,  3.0f, -7.5f),
-		glm::vec3( 1.3f, -2.0f, -2.5f),
-		glm::vec3( 1.5f,  2.0f, -2.5f),
-		glm::vec3( 1.5f,  0.2f, -1.5f),
-		glm::vec3(-1.3f,  1.0f, -1.5f)
-	});
-
-	//Define the light positions
-	gLights[0].position = glm::vec3( 0.7f,  0.2f,  2.0f);
-	gLights[1].position = glm::vec3( 2.3f, -3.3f, -4.0f);
-	gLights[2].position = glm::vec3(-4.0f,  2.0f, -12.0f);
-	gLights[3].position = glm::vec3( 0.0f,  0.0f, -3.0f);
-
-	//Define the light colors
-	gLights[0].ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-	gLights[0].diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-	gLights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
-
-	gLights[1].ambient = glm::vec3(0.2f, 0.0f, 0.0f);
-	gLights[1].diffuse = glm::vec3(0.5f, 0.0f, 0.0f);
-	gLights[1].specular = glm::vec3(1.0f, 0.0f, 0.0f);
-
-	gLights[2].ambient = glm::vec3(0.0f, 0.2f, 0.0f);
-	gLights[2].diffuse = glm::vec3(0.0f, 0.5f, 0.0f);
-	gLights[2].specular = glm::vec3(0.0f, 1.0f, 0.0f);
-
-	gLights[3].ambient = glm::vec3(0.0f, 0.0f, 0.2f);
-	gLights[3].diffuse = glm::vec3(0.0f, 0.0f, 0.5f);
-	gLights[3].specular = glm::vec3(0.0f, 0.0f, 1.0f);
-
-	//Define the spotlight properties
-	gSpotLight.position = gCamera->position;
-	gSpotLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-	gSpotLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-	gSpotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
 	gDirectionalLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
 	gDirectionalLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
 	gDirectionalLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	//Define the spotlight properties
+	gSpotLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
+	gSpotLight.ambient = glm::vec3(0.0f, 0.0f, 0.0f);
+	gSpotLight.diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
+	gSpotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	KJK_INFO("Initialized OpenGL!");
 
 	//Return the success flag
 	return success;
@@ -642,119 +413,36 @@ bool loadMedia()
 	//Create the shaders
 	gShaders.emplace(std::array<Shader, 3>
 	{
-		Shader("assets/shaders/shader.vert", "assets/shaders/shader1.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/backpackShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
 	});
 
-	//Load the crate container texture
-	loadTexture("assets/container2.png", gTextures[0]);
+	//Load the model from a file
+	gModel = new Model("assets/backpack/backpack.obj");
 
-	//Load the metal frame for the container texture
-	loadTexture("assets/container2_specular.png", gTextures[1]);
-
-	//Load the matrix texture
-	loadTexture("assets/matrix.jpg", gTextures[2]);
-
-	//Use the cube shader program
-	(*gShaders)[1].Use();
-
-	//Set the texture and color uniforms for the light on the objects
-	(*gShaders)[1].SetInt("material.diffuse", 0);
-	(*gShaders)[1].SetInt("material.specular", 1);
-	(*gShaders)[1].SetInt("material.emission", 2);
-	(*gShaders)[1].SetFloat("material.shininess", 64.0f);
-
-	//Set color uniforms for the point light sources
-	for (GLuint i = 0; i < 4; i++)
-	{
-		std::string index = std::to_string(i);
-		//Set the position and color uniforms
-		(*gShaders)[1].SetVec3("pointLights[" + index + "].position", gLights[i].position);
-		(*gShaders)[1].SetVec3("pointLights[" + index + "].ambient", gLights[i].ambient);
-		(*gShaders)[1].SetVec3("pointLights[" + index + "].diffuse", gLights[i].diffuse);
-		(*gShaders)[1].SetVec3("pointLights[" + index + "].specular", gLights[i].specular);
-
-		//Set attenuation factors
-		(*gShaders)[1].SetFloat("pointLights[" + index + "].constant", 1.0f);
-		(*gShaders)[1].SetFloat("pointLights[" + index + "].linear", 0.09f);
-		(*gShaders)[1].SetFloat("pointLights[" + index + "].quadratic", 0.032f);
-	}
+	//Use the first shader program
+	(*gShaders)[0].Use();
 
 	//Set color uniforms for the spotlight
-	(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
-	(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
-	(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
-	(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-	(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
-	//Set uniforms for attenuation factors
-	(*gShaders)[1].SetFloat("spotLight.constant", 1.0f);
-	(*gShaders)[1].SetFloat("spotLight.linear", 0.045f);
-	(*gShaders)[1].SetFloat("spotLight.quadratic", 0.0075f);
-	//Set uniforms for spotlight factors
-	(*gShaders)[1].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-	(*gShaders)[1].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(17.5f)));
+	(*gShaders)[0].SetVec3("spotLight.ambient", gSpotLight.ambient);
+	(*gShaders)[0].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+	(*gShaders)[0].SetVec3("spotLight.specular", gSpotLight.specular);
+	//Set spotlight cutoff angles
+	(*gShaders)[0].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+	(*gShaders)[0].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
+	//Set spotlight attenuation factors
+	(*gShaders)[0].SetFloat("spotLight.constant", 1.0f);
+	(*gShaders)[0].SetFloat("spotLight.linear", 0.045f);
+	(*gShaders)[0].SetFloat("spotLight.quadratic", 0.0075f);
 
 	//Set color uniforms for the directional light
-	(*gShaders)[1].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-	(*gShaders)[1].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
-	(*gShaders)[1].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
-	(*gShaders)[1].SetVec3("dirLight.specular", gDirectionalLight.specular);
+	(*gShaders)[0].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+	(*gShaders)[0].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
+	(*gShaders)[0].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
+	(*gShaders)[0].SetVec3("dirLight.specular", gDirectionalLight.specular);
 
-	//Return the success flag
-	return success;
-}
-
-//Load a texture from a file
-bool loadTexture(const std::string& path, GLuint& textureID)
-{
-	//Loading success flag
-	bool success = true;
-
-	//Load the texture image
-	SDL_Surface* surface = IMG_Load(path.c_str());
-	if (surface == nullptr)
-	{
-		KJK_ERROR("Failed to load texture image: {0}", SDL_GetError());
-		success = false;
-	}
-	else
-	{
-		//Generate a texture
-		glGenTextures(1, &textureID);
-		//Bind the texture
-		glBindTexture(GL_TEXTURE_2D, textureID);
-
-		//Convert the surface to a standard format
-		SDL_Surface* formattedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-
-		//Free the original surface
-		SDL_DestroySurface(surface);
-
-		//Check if the conversion was successful
-		if (formattedSurface == nullptr)
-		{
-			KJK_ERROR("Failed to convert surface to standard format: {0}", SDL_GetError());
-			success = false;
-		}
-		else
-		{
-			//Generate the texture using the loaded surface data
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, formattedSurface->w, formattedSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, formattedSurface->pixels);
-
-			//Set the texture wrapping/filtering parameters
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-			//Generate mipmaps
-			glGenerateMipmap(GL_TEXTURE_2D);
-
-			//Free the formatted surface
-			SDL_DestroySurface(formattedSurface);
-		}
-	}
+	KJK_INFO("Loaded media!");
 
 	//Return the success flag
 	return success;
@@ -763,16 +451,11 @@ bool loadTexture(const std::string& path, GLuint& textureID)
 //Cleans up and closes SDL and all used objects
 void close()
 {
-	//Delete OpenGL objects
-	glDeleteVertexArrays(2, gVAOs);
-	glDeleteBuffers(2, gVBOs);
-	glDeleteBuffers(2, gEBOs);
-	
-	//Destroy texture
-	glDeleteTextures(3, gTextures);
-
 	//Delete the camera
 	delete gCamera;
+
+	//Delete the model
+	delete gModel;
 
 	//Destroy window
 	if (gWindow != nullptr)
@@ -783,4 +466,6 @@ void close()
 
 	//Quit SDL subsystems
 	SDL_Quit();
+
+	KJK_INFO("Exited the application!");
 }
