@@ -163,6 +163,11 @@ void Shader::SetVec3(const std::string& name, const glm::vec3& vec) const
 	glUniform3fv(glGetUniformLocation(ID, name.c_str()), 1, glm::value_ptr(vec));
 }
 
+void Shader::SetVec4(const std::string& name, const glm::vec4& vec) const
+{
+	glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, glm::value_ptr(vec));
+}
+
 //Prints out the shader log for a shader object
 void Shader::PrintShaderLog(GLuint shader)
 {

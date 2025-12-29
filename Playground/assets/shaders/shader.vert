@@ -16,15 +16,26 @@ uniform mat4 projection;
 
 struct Light {
 	vec3 position;
+	vec3 direction;
 
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+
+	float constant;
+	float linear;
+	float quadratic;
+
+	float cutOff;
+	float outerCutOff;
+
+	bool isDirectional;
+	bool isSpotlight;
 };
 
 uniform Light light;
 
-out Light lightView;
+flat out Light lightView;
 
 void main()
 {
@@ -35,6 +46,14 @@ void main()
 	fragPos = vec3(view * model * vec4(aPos, 1.0));
 
 	Light lightV = light;
-	lightV.position = vec3(view * vec4(light.position, 1.0));
+	if(light.isDirectional)
+	{
+		lightV.direction = vec3(view * vec4(light.direction, 0.0));
+	}
+	else
+	{
+		lightV.position = vec3(view * vec4(light.position, 1.0));
+		lightV.direction = vec3(view * vec4(light.direction, 0.0));
+	}
 	lightView = lightV;
 }

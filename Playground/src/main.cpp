@@ -101,6 +101,12 @@ int main(int argc, char* args[])
 			//Mouse Input mode setting
 			bool mouseCaptured = true;
 
+			//Enable movement setting
+			bool enableMovement = true;
+
+			//Initialize time value
+			float timeValue = 0.0f;
+
 			//Enum for input state control
 			enum class InputState
 			{
@@ -155,6 +161,9 @@ int main(int argc, char* args[])
 						case SDLK_M: //Switch mouse capture mode
 							mouseCaptured = !mouseCaptured;
 							SDL_SetWindowRelativeMouseMode(gWindow, mouseCaptured);
+							break;
+						case SDLK_P: //Switch object movement setting
+							enableMovement = !enableMovement;
 							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
@@ -225,7 +234,10 @@ int main(int argc, char* args[])
 				//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 				//Calculate the time value
-				float timeValue = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+				if (enableMovement)
+				{
+					timeValue += deltaTime;
+				}
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
@@ -241,30 +253,47 @@ int main(int argc, char* args[])
 				(*gShaders)[2].SetMat4("view", view);
 				(*gShaders)[2].SetMat4("projection", projection);
 
-				//Move the lightning source on an orbit
-				gLight.position.x = 10.5f * sin(0.2f * timeValue);
-				gLight.position.z = 10.5f * cos(0.2f * timeValue);
+				if (enableMovement)
+				{
+					//Move the lightning source on an orbit
+					gLight.position.x = 10.5f * sin(0.2f * timeValue);
+					gLight.position.z = 10.5f * cos(0.2f * timeValue);
 
-				//Set the model matrix for the light source cube
-				glm::mat4 model = glm::mat4(1.0f);
-				model = glm::translate(model, gLight.position);
-				//Scale down the light source cube
-				model = glm::scale(model, glm::vec3(0.2f));
-				//Apply the model matrix to the shader
-				(*gShaders)[2].SetMat4("model", model);
+					//Set the model matrix for the light source cube
+					glm::mat4 model = glm::mat4(1.0f);
+					model = glm::translate(model, gLight.position);
+					//Scale down the light source cube
+					model = glm::scale(model, glm::vec3(0.2f));
+					//Apply the model matrix to the shader
+					(*gShaders)[2].SetMat4("model", model);
 
-				//Adjust the light color over time
-				glm::vec3 lightColor{};
-				lightColor.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
-				lightColor.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
-				lightColor.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
+					//Adjust the light color over time
+					glm::vec3 lightColor{};
+					lightColor.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
+					lightColor.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
+					lightColor.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
 
-				//Calculate the different light type colors
-				glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
-				glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
+					//Calculate the different light type colors
+					glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
+					glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
 
-				//Update the light color uniforms for the light source shader
-				(*gShaders)[2].SetVec3("lightColor", lightColor);
+					//Update the light color uniforms for the light source shader
+					(*gShaders)[2].SetVec3("lightColor", lightColor);
+
+					//Use the defined shader program for the objects
+					//(*gShaders)[1].Use();
+
+					//Update the light position uniform
+					//(*gShaders)[1].SetVec3("light.position", gLight.position);
+
+					//Update the light color uniforms
+					//(*gShaders)[1].SetVec3("light.ambient", ambientColor);
+					//(*gShaders)[1].SetVec3("light.diffuse", diffuseColor);
+					//(*gShaders)[1].SetVec3("light.specular", lightColor);
+				}
+
+				//Switch to the light source shader
+				(*gShaders)[2].Use();
 
 				//Bind the light source VAO
 				glBindVertexArray(gVAOs[1]);
@@ -273,14 +302,6 @@ int main(int argc, char* args[])
 
 				//Use the defined shader program for the objects
 				(*gShaders)[1].Use();
-
-				//Update the light position uniform
-				(*gShaders)[1].SetVec3("light.position", gLight.position);
-
-				//Update the light color uniforms
-				(*gShaders)[1].SetVec3("light.ambient", ambientColor);
-				(*gShaders)[1].SetVec3("light.diffuse", diffuseColor);
-				(*gShaders)[1].SetVec3("light.specular", lightColor);
 
 				//Bind the crate texture
 				glActiveTexture(GL_TEXTURE0);
@@ -294,6 +315,10 @@ int main(int argc, char* args[])
 				(*gShaders)[1].SetMat4("view", view);
 				(*gShaders)[1].SetMat4("projection", projection);
 
+				//Apply camera position changes to the spotlight uniform
+				(*gShaders)[1].SetVec3("light.position", gCamera->position);
+				(*gShaders)[1].SetVec3("light.direction", gCamera->direction);
+
 				//Bind the cube VAO
 				glBindVertexArray(gVAOs[0]);
 
@@ -305,7 +330,7 @@ int main(int argc, char* args[])
 					model = glm::translate(model, (*gCubePositions)[i]);
 
 					//Calculate the angle based on the i value
-					float angle = 20.0f * (i+1);
+					float angle = 20.0f * (i + 1);
 
 					//Rotate the object over time
 					model = glm::rotate(model, timeValue * glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
@@ -592,10 +617,21 @@ bool loadMedia()
 	(*gShaders)[1].SetFloat("material.shininess", 64.0f);
 
 	//Set color uniforms for the light source
-	(*gShaders)[1].SetVec3("light.position", gLight.position);
+	(*gShaders)[1].SetVec3("light.position", gCamera->position);
+	(*gShaders)[1].SetVec3("light.direction", gCamera->direction);
 	(*gShaders)[1].SetVec3("light.ambient", gLight.ambient);
 	(*gShaders)[1].SetVec3("light.diffuse", gLight.diffuse);
 	(*gShaders)[1].SetVec3("light.specular", gLight.specular);
+	//Set uniforms for attenuation factors
+	(*gShaders)[1].SetFloat("light.constant", 1.0f);
+	(*gShaders)[1].SetFloat("light.linear", 0.045f);
+	(*gShaders)[1].SetFloat("light.quadratic", 0.0075f);
+	//Set uniforms for spotlight factors
+	(*gShaders)[1].SetFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
+	(*gShaders)[1].SetFloat("light.outerCutOff", glm::cos(glm::radians(17.5f)));
+	//Set if the light is directional, point, or spotlight
+	(*gShaders)[1].SetBool("light.isDirectional", false);
+	(*gShaders)[1].SetBool("light.isSpotlight", true);
 
 	//Set the color uniforms for the light source
 	(*gShaders)[2].Use();

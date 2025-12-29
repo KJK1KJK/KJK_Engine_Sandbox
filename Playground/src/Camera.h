@@ -13,7 +13,7 @@ public:
 	glm::vec3 up;
 
 	//Camera speed
-	const float speed{ 1.0f };
+	const float speed{ 3.0f };
 	//Mouse sensitivity
 	const float sensitivity{ 0.1f };
 	//Scroll sensitivity
