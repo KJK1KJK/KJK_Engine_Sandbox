@@ -54,7 +54,13 @@ struct Light
 	glm::vec3 ambient;
 	glm::vec3 diffuse;
 	glm::vec3 specular;
-} gLight(glm::vec3(1.0f), glm::vec3(1.0f), glm::vec3(1.0f), glm::vec3(1.0f));
+};
+
+Light gLights[4];
+
+Light gDirectionalLight;
+
+Light gSpotLight;
 
 //The main function
 int main(int argc, char* args[])
@@ -103,6 +109,9 @@ int main(int argc, char* args[])
 
 			//Enable movement setting
 			bool enableMovement = true;
+
+			//Flashlight on/off setting
+			bool flashlightEnabled = true;
 
 			//Initialize time value
 			float timeValue = 0.0f;
@@ -164,6 +173,23 @@ int main(int argc, char* args[])
 							break;
 						case SDLK_P: //Switch object movement setting
 							enableMovement = !enableMovement;
+							break;
+						case SDLK_F: //Toggle flashlight
+							flashlightEnabled = !flashlightEnabled;
+
+							(*gShaders)[1].Use();
+							if(flashlightEnabled)
+							{
+								(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
+								(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+								(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
+							}
+							else
+							{
+								(*gShaders)[1].SetVec3("spotLight.ambient", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec3("spotLight.specular", glm::vec3(0.0f));
+							}
 							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
@@ -246,59 +272,58 @@ int main(int argc, char* args[])
 				glm::mat4 projection = glm::mat4(1.0f);
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
-				//Switch to the light source shader
-				(*gShaders)[2].Use();
-
-				//Apply the transformation matrices to the shader
-				(*gShaders)[2].SetMat4("view", view);
-				(*gShaders)[2].SetMat4("projection", projection);
-
+				//Update the first light source position and color over time
 				if (enableMovement)
 				{
 					//Move the lightning source on an orbit
-					gLight.position.x = 10.5f * sin(0.2f * timeValue);
-					gLight.position.z = 10.5f * cos(0.2f * timeValue);
-
-					//Set the model matrix for the light source cube
-					glm::mat4 model = glm::mat4(1.0f);
-					model = glm::translate(model, gLight.position);
-					//Scale down the light source cube
-					model = glm::scale(model, glm::vec3(0.2f));
-					//Apply the model matrix to the shader
-					(*gShaders)[2].SetMat4("model", model);
+					gLights[0].position.x = 10.5f * sin(0.2f * timeValue);
+					gLights[0].position.z = 10.5f * cos(0.2f * timeValue);
 
 					//Adjust the light color over time
-					glm::vec3 lightColor{};
-					lightColor.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
-					lightColor.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
-					lightColor.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
+					gLights[0].specular.x = (sin(timeValue * 0.2f * 2.0f) + 1.0f) / 2.0f;
+					gLights[0].specular.y = (sin(timeValue * 0.2f * 0.7f) + 1.0f) / 2.0f;
+					gLights[0].specular.z = (sin(timeValue * 0.2f * 1.3f) + 1.0f) / 2.0f;
 
 					//Calculate the different light type colors
-					glm::vec3 diffuseColor = lightColor * glm::vec3(0.5f);
-					glm::vec3 ambientColor = diffuseColor * glm::vec3(0.2f);
-
-					//Update the light color uniforms for the light source shader
-					(*gShaders)[2].SetVec3("lightColor", lightColor);
+					gLights[0].diffuse = gLights[0].specular * glm::vec3(0.5f);
+					gLights[0].ambient = gLights[0].specular * glm::vec3(0.2f);
 
 					//Use the defined shader program for the objects
-					//(*gShaders)[1].Use();
-
-					//Update the light position uniform
-					//(*gShaders)[1].SetVec3("light.position", gLight.position);
+					(*gShaders)[1].Use();
 
 					//Update the light color uniforms
-					//(*gShaders)[1].SetVec3("light.ambient", ambientColor);
-					//(*gShaders)[1].SetVec3("light.diffuse", diffuseColor);
-					//(*gShaders)[1].SetVec3("light.specular", lightColor);
+					(*gShaders)[1].SetVec3("pointLights[0].ambient", gLights[0].ambient);
+					(*gShaders)[1].SetVec3("pointLights[0].diffuse", gLights[0].diffuse);
+					(*gShaders)[1].SetVec3("pointLights[0].specular", gLights[0].specular);
 				}
 
 				//Switch to the light source shader
 				(*gShaders)[2].Use();
 
-				//Bind the light source VAO
-				glBindVertexArray(gVAOs[1]);
-				//Draw the light source cube
-				glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				//Apply the transformation matrices to the light object shader
+				(*gShaders)[2].SetMat4("view", view);
+				(*gShaders)[2].SetMat4("projection", projection);
+
+				//Bind the cube VAO
+				glBindVertexArray(gVAOs[0]);
+
+				//Iterate over all lights to draw their light source cubes
+				for (GLuint i = 0; i < 4; i++)
+				{
+					//Set the model matrix for the light source cube
+					glm::mat4 model = glm::mat4(1.0f);
+					model = glm::translate(model, gLights[i].position);
+					//Scale down the light source cube
+					model = glm::scale(model, glm::vec3(0.2f));
+					//Apply the model matrix to the shader
+					(*gShaders)[2].SetMat4("model", model);
+
+					//Update the light color uniform
+					(*gShaders)[2].SetVec3("lightColor", gLights[i].specular);
+
+					//Draw the light source cube
+					glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				}
 
 				//Use the defined shader program for the objects
 				(*gShaders)[1].Use();
@@ -316,11 +341,8 @@ int main(int argc, char* args[])
 				(*gShaders)[1].SetMat4("projection", projection);
 
 				//Apply camera position changes to the spotlight uniform
-				(*gShaders)[1].SetVec3("light.position", gCamera->position);
-				(*gShaders)[1].SetVec3("light.direction", gCamera->direction);
-
-				//Bind the cube VAO
-				glBindVertexArray(gVAOs[0]);
+				(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
+				(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
 
 				//Iterate over cube position to draw 10 objects that rotate
 				for (GLuint i = 0; i < 10; i++)
@@ -573,13 +595,40 @@ bool initGL()
 		glm::vec3(-1.3f,  1.0f, -1.5f)
 	});
 
-	//Define the light position
-	gLight.position = glm::vec3(1.2f, 1.0f, 2.0f);
+	//Define the light positions
+	gLights[0].position = glm::vec3( 0.7f,  0.2f,  2.0f);
+	gLights[1].position = glm::vec3( 2.3f, -3.3f, -4.0f);
+	gLights[2].position = glm::vec3(-4.0f,  2.0f, -12.0f);
+	gLights[3].position = glm::vec3( 0.0f,  0.0f, -3.0f);
 
 	//Define the light colors
-	gLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-	gLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-	gLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	gLights[0].ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+	gLights[0].diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
+	gLights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	gLights[1].ambient = glm::vec3(0.2f, 0.0f, 0.0f);
+	gLights[1].diffuse = glm::vec3(0.5f, 0.0f, 0.0f);
+	gLights[1].specular = glm::vec3(1.0f, 0.0f, 0.0f);
+
+	gLights[2].ambient = glm::vec3(0.0f, 0.2f, 0.0f);
+	gLights[2].diffuse = glm::vec3(0.0f, 0.5f, 0.0f);
+	gLights[2].specular = glm::vec3(0.0f, 1.0f, 0.0f);
+
+	gLights[3].ambient = glm::vec3(0.0f, 0.0f, 0.2f);
+	gLights[3].diffuse = glm::vec3(0.0f, 0.0f, 0.5f);
+	gLights[3].specular = glm::vec3(0.0f, 0.0f, 1.0f);
+
+	//Define the spotlight properties
+	gSpotLight.position = gCamera->position;
+	gSpotLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+	gSpotLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
+	gSpotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	//Define the directional light properties
+	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
+	gDirectionalLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+	gDirectionalLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
+	gDirectionalLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 
 	//Return the success flag
 	return success;
@@ -616,26 +665,41 @@ bool loadMedia()
 	(*gShaders)[1].SetInt("material.emission", 2);
 	(*gShaders)[1].SetFloat("material.shininess", 64.0f);
 
-	//Set color uniforms for the light source
-	(*gShaders)[1].SetVec3("light.position", gCamera->position);
-	(*gShaders)[1].SetVec3("light.direction", gCamera->direction);
-	(*gShaders)[1].SetVec3("light.ambient", gLight.ambient);
-	(*gShaders)[1].SetVec3("light.diffuse", gLight.diffuse);
-	(*gShaders)[1].SetVec3("light.specular", gLight.specular);
-	//Set uniforms for attenuation factors
-	(*gShaders)[1].SetFloat("light.constant", 1.0f);
-	(*gShaders)[1].SetFloat("light.linear", 0.045f);
-	(*gShaders)[1].SetFloat("light.quadratic", 0.0075f);
-	//Set uniforms for spotlight factors
-	(*gShaders)[1].SetFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
-	(*gShaders)[1].SetFloat("light.outerCutOff", glm::cos(glm::radians(17.5f)));
-	//Set if the light is directional, point, or spotlight
-	(*gShaders)[1].SetBool("light.isDirectional", false);
-	(*gShaders)[1].SetBool("light.isSpotlight", true);
+	//Set color uniforms for the point light sources
+	for (GLuint i = 0; i < 4; i++)
+	{
+		std::string index = std::to_string(i);
+		//Set the position and color uniforms
+		(*gShaders)[1].SetVec3("pointLights[" + index + "].position", gLights[i].position);
+		(*gShaders)[1].SetVec3("pointLights[" + index + "].ambient", gLights[i].ambient);
+		(*gShaders)[1].SetVec3("pointLights[" + index + "].diffuse", gLights[i].diffuse);
+		(*gShaders)[1].SetVec3("pointLights[" + index + "].specular", gLights[i].specular);
 
-	//Set the color uniforms for the light source
-	(*gShaders)[2].Use();
-	(*gShaders)[2].SetVec3("lightColor", gLight.specular);
+		//Set attenuation factors
+		(*gShaders)[1].SetFloat("pointLights[" + index + "].constant", 1.0f);
+		(*gShaders)[1].SetFloat("pointLights[" + index + "].linear", 0.09f);
+		(*gShaders)[1].SetFloat("pointLights[" + index + "].quadratic", 0.032f);
+	}
+
+	//Set color uniforms for the spotlight
+	(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
+	(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
+	(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
+	(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
+	(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
+	//Set uniforms for attenuation factors
+	(*gShaders)[1].SetFloat("spotLight.constant", 1.0f);
+	(*gShaders)[1].SetFloat("spotLight.linear", 0.045f);
+	(*gShaders)[1].SetFloat("spotLight.quadratic", 0.0075f);
+	//Set uniforms for spotlight factors
+	(*gShaders)[1].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+	(*gShaders)[1].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(17.5f)));
+
+	//Set color uniforms for the directional light
+	(*gShaders)[1].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+	(*gShaders)[1].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
+	(*gShaders)[1].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
+	(*gShaders)[1].SetVec3("dirLight.specular", gDirectionalLight.specular);
 
 	//Return the success flag
 	return success;

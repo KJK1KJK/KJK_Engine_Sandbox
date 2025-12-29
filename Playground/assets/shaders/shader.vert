@@ -14,7 +14,32 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-struct Light {
+struct DirLight {
+	vec3 direction;
+
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+};
+uniform DirLight dirLight;
+out DirLight dirLightView;
+
+struct PointLight {
+	vec3 position;
+
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+
+	float constant;
+	float linear;
+	float quadratic;
+};
+#define NR_POINT_LIGHTS 4
+uniform PointLight pointLights[NR_POINT_LIGHTS];
+out PointLight pointLightsView[NR_POINT_LIGHTS];
+
+struct SpotLight {
 	vec3 position;
 	vec3 direction;
 
@@ -28,14 +53,9 @@ struct Light {
 
 	float cutOff;
 	float outerCutOff;
-
-	bool isDirectional;
-	bool isSpotlight;
 };
-
-uniform Light light;
-
-flat out Light lightView;
+uniform SpotLight spotLight;
+out SpotLight spotLightView;
 
 void main()
 {
@@ -45,15 +65,19 @@ void main()
 	normal = mat3(transpose(inverse(view * model))) * aNormal;
 	fragPos = vec3(view * model * vec4(aPos, 1.0));
 
-	Light lightV = light;
-	if(light.isDirectional)
+	DirLight dirLightV = dirLight;
+	dirLightV.direction = vec3(view * vec4(dirLight.direction, 0.0));
+	dirLightView = dirLightV;
+
+	for(int i = 0; i < NR_POINT_LIGHTS; i++)
 	{
-		lightV.direction = vec3(view * vec4(light.direction, 0.0));
+		PointLight pointLightV = pointLights[i];
+		pointLightV.position = vec3(view * vec4(pointLights[i].position, 1.0));
+		pointLightsView[i] = pointLightV;
 	}
-	else
-	{
-		lightV.position = vec3(view * vec4(light.position, 1.0));
-		lightV.direction = vec3(view * vec4(light.direction, 0.0));
-	}
-	lightView = lightV;
+
+	SpotLight spotLightV = spotLight;
+	spotLightV.position = vec3(view * vec4(spotLight.position, 1.0));
+	spotLightV.direction = vec3(view * vec4(spotLight.direction, 0.0));
+	spotLightView = spotLightV;
 }
