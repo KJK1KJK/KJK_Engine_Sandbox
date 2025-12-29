@@ -47,6 +47,7 @@ find_package(onnxruntime CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(unofficial-enet CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
 
 #Add subdirectories for Engine and Sandbox
 add_subdirectory(Engine)

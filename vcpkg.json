@@ -19,6 +19,7 @@
     "onnxruntime",
     "spdlog",
     "glad",
+    "assimp",
     {
       "name": "imgui",
       "features": [ "docking-experimental", "sdl3-binding", "opengl3-binding" ]

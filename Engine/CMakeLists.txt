@@ -28,4 +28,5 @@ target_link_libraries(Engine PUBLIC
     cpr::cpr
     unofficial::enet::enet
     spdlog::spdlog
+    assimp::assimp
 )
