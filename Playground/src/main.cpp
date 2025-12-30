@@ -31,7 +31,7 @@ SDL_Window* gWindow = nullptr;
 SDL_GLContext gContext;
 
 //Shader program ID
-std::optional<std::array<Shader, 4>> gShaders;
+std::optional<std::array<Shader, 5>> gShaders;
 
 //Camera object
 Camera* gCamera;
@@ -109,6 +109,9 @@ int main(int argc, char* args[])
 
 			//Flashlight on/off setting
 			bool flashlightEnabled = true;
+
+			//Highligh outline effect settings
+			bool outlineEffectEnabled = true;
 
 			//Initialize time value
 			float timeValue = 0.0f;
@@ -188,6 +191,17 @@ int main(int argc, char* args[])
 								(*gShaders)[1].SetVec3("spotLight.specular", glm::vec3(0.0f));
 							}
 							break;
+						case SDLK_O: //Toggle outline effect
+							outlineEffectEnabled = !outlineEffectEnabled;
+							if (outlineEffectEnabled)
+							{
+								glEnable(GL_STENCIL_TEST);
+							}
+							else
+							{
+								glDisable(GL_STENCIL_TEST);
+							}
+							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
 							{
@@ -251,7 +265,7 @@ int main(int argc, char* args[])
 				//Set the clear color
 				glClearColor(0.2f, 0.f, 0.2f, 1.0f);
 				//Clear the color buffer
-				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 				//Set to polygon wireframe mode
 				//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -281,12 +295,62 @@ int main(int argc, char* args[])
 				(*gShaders)[1].SetMat4("view", view);
 				(*gShaders)[1].SetMat4("projection", projection);
 
-				//Render the objects
+				//Disable writing to the stencil buffer
+				glStencilMask(0x00);
+
+				//Render the plane
+				gPlaneModel->Draw((*gShaders)[1]);
+
+				//Setup the stencil buffer operations for writing
+				glStencilFunc(GL_ALWAYS, 1, 0xFF);
+				glStencilMask(0xFF);
+
+				//Render the cubes
 				for (int i = 0; i < 2; ++i)
 				{
 					gCubeModels[i].Draw((*gShaders)[1]);
 				}
-				gPlaneModel->Draw((*gShaders)[1]);
+
+				if (outlineEffectEnabled)
+				{
+					//Setup the stencil buffer operations for the outline effect
+					glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+					//Disable writing to the stencil buffer
+					glStencilMask(0x00);
+
+					//Disable the depth buffer operations
+					glDisable(GL_DEPTH_TEST);
+
+					//Use the border shader
+					(*gShaders)[4].Use();
+
+					//Update the view and projection matrices in the shader
+					(*gShaders)[4].SetMat4("view", view);
+					(*gShaders)[4].SetMat4("projection", projection);
+
+					//Render the scaled up cubes for the outline effect
+					for (int i = 0; i < 2; ++i)
+					{
+						//Save the original scale
+						glm::vec3 originalScale = gCubeModels[i].getScale();
+
+						//Set the new scale
+						gCubeModels[i].setScale(originalScale * 1.1f);
+
+						//Draw the cube
+						gCubeModels[i].Draw((*gShaders)[4]);
+
+						//Restore the original scale
+						gCubeModels[i].setScale(originalScale);
+					}
+
+					//Re-enable depth buffer writing
+					glEnable(GL_DEPTH_TEST);
+
+					//Reset the stencil buffer settings
+					glStencilMask(0xFF);
+					glStencilFunc(GL_ALWAYS, 1, 0xFF);
+				}
 
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
@@ -330,6 +394,7 @@ bool init()
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+		SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
 		//Create a window
 		gWindow = SDL_CreateWindow("LearnOpenGL", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
@@ -393,6 +458,11 @@ bool initGL()
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
+	//Enable stencil testing
+	glEnable(GL_STENCIL_TEST);
+	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
 	gDirectionalLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
@@ -423,12 +493,13 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 4>
+	gShaders.emplace(std::array<Shader, 5>
 	{
 		Shader("assets/shaders/shader.vert", "assets/shaders/backpackShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag")
+		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/BorderShader.frag")
 	});
 
 	//Load two cube models
@@ -438,8 +509,8 @@ bool loadMedia()
 		CubeModel("assets/marble.jpg", "assets/marble.jpg")
 	};
 	//Set the positions of the cube models
-	gCubeModels[0].setPosition(glm::vec3(-1.0f, 0.0f, -1.0f));
-	gCubeModels[1].setPosition(glm::vec3(2.0f, 0.0f, 0.0f));
+	gCubeModels[0].setPosition(glm::vec3(-1.0f, 0.0001f, -1.0f));
+	gCubeModels[1].setPosition(glm::vec3(2.0f, 0.0001f, 0.0f));
 
 	//Load the plane model
 	gPlaneModel = new PlaneModel("assets/metal.png", "assets/metal.png");
