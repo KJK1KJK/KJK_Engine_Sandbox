@@ -31,7 +31,7 @@ SDL_Window* gWindow = nullptr;
 SDL_GLContext gContext;
 
 //Shader program ID
-std::optional<std::array<Shader, 3>> gShaders;
+std::optional<std::array<Shader, 4>> gShaders;
 
 //Camera object
 Camera* gCamera;
@@ -391,6 +391,7 @@ bool initGL()
 
 	//Enable depth testing
 	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -422,11 +423,12 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 3>
+	gShaders.emplace(std::array<Shader, 4>
 	{
 		Shader("assets/shaders/shader.vert", "assets/shaders/backpackShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag")
+		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag")
 	});
 
 	//Load two cube models
