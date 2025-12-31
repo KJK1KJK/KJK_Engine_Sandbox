@@ -363,11 +363,17 @@ int main(int argc, char* args[])
 					sorted[distance] = &gGlassPlaneModels[i];
 				}
 
+				//Disable face culling for the glass planes
+				glDisable(GL_CULL_FACE);
+
 				//Render the glass planes in back-to-front order
 				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
 				{
 					it->second->Draw((*gShaders)[1]);
 				}
+
+				//Re-enable face culling
+				glEnable(GL_CULL_FACE);
 
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
@@ -485,6 +491,11 @@ bool initGL()
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glBlendEquation(GL_FUNC_ADD);
+
+	//Enable face culling
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+	glFrontFace(GL_CCW);
 
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
