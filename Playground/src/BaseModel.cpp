@@ -90,6 +90,9 @@ void BaseModel::Draw(const Shader& shader, glm::mat4 model) const
 	//Use the model matrix
 	shader.SetMat4("model", model);
 
+	//Set the texture scale uniform
+	shader.SetFloat("textureScale", textureScale);
+
 	//Bind the diffuse texture
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, mDiffuseId);
@@ -191,6 +194,10 @@ GLuint BaseModel::TextureFromFile(const char* path)
 		//Bind the texture
 		glBindTexture(GL_TEXTURE_2D, textureID);
 
+		//Check if the surface has an alpha channel
+		const SDL_PixelFormatDetails* details = SDL_GetPixelFormatDetails(surface->format);
+		bool hasAlpha = (details && details->Amask != 0);
+
 		//Convert the surface to a standard format
 		SDL_Surface* formattedSurface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
 
@@ -207,9 +214,12 @@ GLuint BaseModel::TextureFromFile(const char* path)
 			//Generate the texture using the loaded surface data
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, formattedSurface->w, formattedSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, formattedSurface->pixels);
 
+			//Get the texture wrap mode from the alpha channel presence
+			GLenum wrapMode = hasAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+
 			//Set the texture wrapping/filtering parameters
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapMode);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapMode);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 

@@ -41,9 +41,9 @@ struct Light
 {
 	glm::vec3 position;
 
-	glm::vec3 ambient;
-	glm::vec3 diffuse;
-	glm::vec3 specular;
+	glm::vec4 ambient;
+	glm::vec4 diffuse;
+	glm::vec4 specular;
 };
 
 //Directional light object
@@ -61,6 +61,9 @@ CubeModel* gCubeModels;
 
 //Plane model object
 PlaneModel* gPlaneModel;
+
+//Grass objects
+PlaneModel* gGlassPlaneModels;
 
 //The main function
 int main(int argc, char* args[])
@@ -98,20 +101,20 @@ int main(int argc, char* args[])
 
 			//Set the initial mix value for texture blending
 			float mixValue = 0.2f;
-			(*gShaders)[0].Use();
-			(*gShaders)[0].SetFloat("mixValue", mixValue);
+			(*gShaders)[1].Use();
+			(*gShaders)[1].SetFloat("mixValue", mixValue);
 
 			//Mouse Input mode setting
 			bool mouseCaptured = true;
 
-			//Enable movement setting
+			//Object movement setting
 			bool enableMovement = true;
 
 			//Flashlight on/off setting
-			bool flashlightEnabled = true;
+			bool flashlightEnabled = false;
 
 			//Highligh outline effect settings
-			bool outlineEffectEnabled = true;
+			bool outlineEffectEnabled = false;
 
 			//Initialize time value
 			float timeValue = 0.0f;
@@ -180,15 +183,15 @@ int main(int argc, char* args[])
 							(*gShaders)[1].Use();
 							if(flashlightEnabled)
 							{
-								(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
-								(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-								(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
+								(*gShaders)[1].SetVec4("spotLight.ambient", gSpotLight.ambient);
+								(*gShaders)[1].SetVec4("spotLight.diffuse", gSpotLight.diffuse);
+								(*gShaders)[1].SetVec4("spotLight.specular", gSpotLight.specular);
 							}
 							else
 							{
-								(*gShaders)[1].SetVec3("spotLight.ambient", glm::vec3(0.0f));
-								(*gShaders)[1].SetVec3("spotLight.diffuse", glm::vec3(0.0f));
-								(*gShaders)[1].SetVec3("spotLight.specular", glm::vec3(0.0f));
+								(*gShaders)[1].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+								(*gShaders)[1].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+								(*gShaders)[1].SetVec4("spotLight.specular", glm::vec4(0.0f));
 							}
 							break;
 						case SDLK_O: //Toggle outline effect
@@ -212,8 +215,8 @@ int main(int argc, char* args[])
 									mixValue = 1.0f;
 								}
 								//Apply the new mix value
-								(*gShaders)[0].Use();
-								(*gShaders)[0].SetFloat("mixValue", mixValue);
+								(*gShaders)[1].Use();
+								(*gShaders)[1].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV: //Increase the FoV
 								gCamera->fov += 5.0f;
@@ -236,8 +239,8 @@ int main(int argc, char* args[])
 									mixValue = 0.0f;
 								}
 								//Apply the new mix value
-								(*gShaders)[0].Use();
-								(*gShaders)[0].SetFloat("mixValue", mixValue);
+								(*gShaders)[1].Use();
+								(*gShaders)[1].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV:
 								gCamera->fov -= 5.0f;
@@ -352,6 +355,20 @@ int main(int argc, char* args[])
 					glStencilFunc(GL_ALWAYS, 1, 0xFF);
 				}
 
+				//Create a sorted map of the glass planes based on distance from the camera
+				std::map<float, PlaneModel*> sorted;
+				for (GLuint i = 0; i < 5; ++i)
+				{
+					float distance = glm::length(gCamera->position - gGlassPlaneModels[i].getPosition());
+					sorted[distance] = &gGlassPlaneModels[i];
+				}
+
+				//Render the glass planes in back-to-front order
+				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+				{
+					it->second->Draw((*gShaders)[1]);
+				}
+
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
 			}
@@ -394,6 +411,7 @@ bool init()
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
 		//Create a window
@@ -463,23 +481,28 @@ bool initGL()
 	glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 
+	//Enable blending
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBlendEquation(GL_FUNC_ADD);
+
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
-	gDirectionalLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-	gDirectionalLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-	gDirectionalLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	gDirectionalLight.ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
+	gDirectionalLight.diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+	gDirectionalLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	//Define the spotlight properties
 	gSpotLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
-	gSpotLight.ambient = glm::vec3(0.0f, 0.0f, 0.0f);
-	gSpotLight.diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
-	gSpotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	gSpotLight.ambient = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	gSpotLight.diffuse = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	gSpotLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	//Define the point lights properties
 	gPointLights[0].position = glm::vec3(10.0f, 10.5f, 10.0f);
-	gPointLights[0].ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-	gPointLights[0].diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-	gPointLights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	gPointLights[0].ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
+	gPointLights[0].diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+	gPointLights[0].specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	KJK_INFO("Initialized OpenGL!");
 
@@ -495,7 +518,7 @@ bool loadMedia()
 	//Create the shaders
 	gShaders.emplace(std::array<Shader, 5>
 	{
-		Shader("assets/shaders/shader.vert", "assets/shaders/backpackShader.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag"),
@@ -509,23 +532,47 @@ bool loadMedia()
 		CubeModel("assets/marble.jpg", "assets/marble.jpg")
 	};
 	//Set the positions of the cube models
-	gCubeModels[0].setPosition(glm::vec3(-1.0f, 0.0001f, -1.0f));
-	gCubeModels[1].setPosition(glm::vec3(2.0f, 0.0001f, 0.0f));
+	gCubeModels[0].setPosition(glm::vec3(-1.5f, 0.0001f, -1.0f));
+	gCubeModels[1].setPosition(glm::vec3(1.5f, 0.0001f, 0.0f));
 
 	//Load the plane model
 	gPlaneModel = new PlaneModel("assets/metal.png", "assets/metal.png");
 	//Set the position of the plane model
 	gPlaneModel->setPosition(glm::vec3(0.0f, -0.5f, 0.0f));
 	//Set the scale of the plane model
-	gPlaneModel->setScale(glm::vec3(5.0f, 1.0f, 5.0f));
+	gPlaneModel->setScale(glm::vec3(6.0f, 1.0f, 6.0f));
+	//Set the texture scale of the plane model
+	gPlaneModel->setTextureScale(2.0f);
+
+	//Load the grass models
+	gGlassPlaneModels = new PlaneModel[5]
+	{
+		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png"),
+		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png"),
+		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png"),
+		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png"),
+		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png")
+	};
+	//Set the positions of the grass models
+	gGlassPlaneModels[0].setPosition(glm::vec3(-1.5f, -0.0001f, -0.48f));
+	gGlassPlaneModels[1].setPosition(glm::vec3( 1.5f, -0.0001f,  0.51f));
+	gGlassPlaneModels[2].setPosition(glm::vec3( 0.0f, -0.0001f,  0.7f));
+	gGlassPlaneModels[3].setPosition(glm::vec3(-0.3f, -0.0001f, -2.3f));
+	gGlassPlaneModels[4].setPosition(glm::vec3( 0.5f, -0.0001f, -0.6f));
+	//Set the rotations of the grass models
+	for(int i = 0; i < 5; ++i)
+	{
+		//Rotate the grass models so they stand upright
+		gGlassPlaneModels[i].setRotation(glm::vec3(90.0f, 0.0f, 0.0f));
+	}
 
 	//Use the first shader program
 	(*gShaders)[1].Use();
 
 	//Set color uniforms for the spotlight
-	(*gShaders)[1].SetVec3("spotLight.ambient", gSpotLight.ambient);
-	(*gShaders)[1].SetVec3("spotLight.diffuse", gSpotLight.diffuse);
-	(*gShaders)[1].SetVec3("spotLight.specular", gSpotLight.specular);
+	(*gShaders)[1].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+	(*gShaders)[1].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+	(*gShaders)[1].SetVec4("spotLight.specular", glm::vec4(0.0f));
 	//Set spotlight cutoff angles
 	(*gShaders)[1].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
 	(*gShaders)[1].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
@@ -536,15 +583,15 @@ bool loadMedia()
 
 	//Set color uniforms for the directional light
 	(*gShaders)[1].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-	(*gShaders)[1].SetVec3("dirLight.ambient", gDirectionalLight.ambient);
-	(*gShaders)[1].SetVec3("dirLight.diffuse", gDirectionalLight.diffuse);
-	(*gShaders)[1].SetVec3("dirLight.specular", gDirectionalLight.specular);
+	(*gShaders)[1].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
+	(*gShaders)[1].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
+	(*gShaders)[1].SetVec4("dirLight.specular", gDirectionalLight.specular);
 
 	//Set color uniforms for the point light
 	(*gShaders)[1].SetVec3("pointLights[0].position", gPointLights[0].position);
-	(*gShaders)[1].SetVec3("pointLights[0].ambient", gPointLights[0].ambient);
-	(*gShaders)[1].SetVec3("pointLights[0].diffuse", gPointLights[0].diffuse);
-	(*gShaders)[1].SetVec3("pointLights[0].specular", gPointLights[0].specular);
+	(*gShaders)[1].SetVec4("pointLights[0].ambient", gPointLights[0].ambient);
+	(*gShaders)[1].SetVec4("pointLights[0].diffuse", gPointLights[0].diffuse);
+	(*gShaders)[1].SetVec4("pointLights[0].specular", gPointLights[0].specular);
 	//Set point light attenuation factors
 	(*gShaders)[1].SetFloat("pointLights[0].constant", 1.0f);
 	(*gShaders)[1].SetFloat("pointLights[0].linear", 0.09f);

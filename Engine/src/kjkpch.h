@@ -14,6 +14,7 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <map>
 
 #ifdef KJK_PLATFORM_WINDOWS
 	#include <Windows.h>

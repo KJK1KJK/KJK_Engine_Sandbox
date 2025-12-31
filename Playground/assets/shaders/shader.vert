@@ -8,26 +8,30 @@ out vec3 fragPos;
 out vec3 normal;
 out vec2 texCoords;
 
+uniform float textureScale;
+
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-struct DirLight {
+struct DirLight
+{
 	vec3 direction;
 
-	vec3 ambient;
-	vec3 diffuse;
-	vec3 specular;
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
 };
 uniform DirLight dirLight;
 out DirLight dirLightView;
 
-struct PointLight {
+struct PointLight
+{
 	vec3 position;
 
-	vec3 ambient;
-	vec3 diffuse;
-	vec3 specular;
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
 
 	float constant;
 	float linear;
@@ -37,13 +41,14 @@ struct PointLight {
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 out PointLight pointLightsView[NR_POINT_LIGHTS];
 
-struct SpotLight {
+struct SpotLight
+{
 	vec3 position;
 	vec3 direction;
 
-	vec3 ambient;
-	vec3 diffuse;
-	vec3 specular;
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
 
 	float constant;
 	float linear;
@@ -58,7 +63,7 @@ out SpotLight spotLightView;
 void main()
 {
 	gl_Position = projection * view * model * vec4(aPos, 1.0);
-	texCoords = aTexCoords;
+	texCoords = aTexCoords * textureScale;
 	normal = mat3(transpose(inverse(view * model))) * aNormal;
 	fragPos = vec3(view * model * vec4(aPos, 1.0));
 

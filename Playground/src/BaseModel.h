@@ -18,6 +18,9 @@ protected:
 	glm::vec3 scale;
 	glm::vec3 rotation;
 
+	//Texture scale
+	float textureScale{ 1.0f };
+
 	//Vertices and indices
 	std::vector<BaseVertex> vertices;
 	std::vector<GLuint> indices;
@@ -38,18 +41,22 @@ public:
 	virtual void Draw(const Shader& shader, glm::mat4 model = glm::mat4(1.0f)) const;
 
 	//Getters for transformation properties
-	glm::vec3 getPosition() const { return position; }
-	glm::vec3 getScale() const { return scale; }
-	glm::vec3 getRotation() const { return rotation; }
+	inline glm::vec3 getPosition() const { return position; }
+	inline glm::vec3 getScale() const { return scale; }
+	inline glm::vec3 getRotation() const { return rotation; }
 
 	//Setters for transformation properties
-	void setPosition(const glm::vec3& pos) { position = pos; }
-	void setScale(const glm::vec3& scl) { scale = scl; }
-	void setRotation(const glm::vec3& rot) { rotation = rot; }
+	inline void setPosition(const glm::vec3& pos) { position = pos; }
+	inline void setScale(const glm::vec3& scl) { scale = scl; }
+	inline void setRotation(const glm::vec3& rot) { rotation = rot; }
+
+	//Getter and setter for texture scale
+	inline float getTextureScale() const { return textureScale; }
+	inline void setTextureScale(float texScale) { textureScale = texScale; }
 
 	//Getters for vertices and indices
-	const std::vector<BaseVertex>& getVertices() const { return vertices; }
-	const std::vector<GLuint>& getIndices() const { return indices; }
+	inline const std::vector<BaseVertex>& getVertices() const { return vertices; }
+	inline const std::vector<GLuint>& getIndices() const { return indices; }
 
 	//Setters for vertices and indices
 	void setBufferData(const std::vector<BaseVertex>& verts, const std::vector<GLuint>& inds);
