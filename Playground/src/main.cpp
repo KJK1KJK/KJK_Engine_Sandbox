@@ -19,6 +19,9 @@ bool initGL();
 bool loadMedia();
 //Cleans up and closes SDL and all used objects
 void close();
+//Change the shader program
+void changeShader(GLint shaderIndex);
+
 
 //Global variables
 int SCREEN_WIDTH{ 800 };
@@ -30,8 +33,20 @@ SDL_Window* gWindow = nullptr;
 //Context for OpenGL
 SDL_GLContext gContext;
 
-//Shader program ID
+//Framebuffer object ID
+GLuint gFBO{ 0 };
+//Texture that servers as the framebuffer color attachment
+GLuint gFBOTexture{ 0 };
+//Renderbuffer object for depth and stencil attachments
+GLuint gRBO{ 0 };
+//Screen quad VAO and VBO
+GLuint gScreenQuadVAO{ 0 };
+GLuint gScreenQuadVBO{ 0 };
+
+//Shader program IDs
 std::optional<std::array<Shader, 5>> gShaders;
+//Current shader index
+GLint gCurrentShaderIndex{ 0 };
 
 //Camera object
 Camera* gCamera;
@@ -62,7 +77,7 @@ CubeModel* gCubeModels;
 //Plane model object
 PlaneModel* gPlaneModel;
 
-//Grass objects
+//Glass objects
 PlaneModel* gGlassPlaneModels;
 
 //The main function
@@ -115,6 +130,9 @@ int main(int argc, char* args[])
 
 			//Highligh outline effect settings
 			bool outlineEffectEnabled = false;
+
+			//Postprocessing effect settings
+			bool applyPostProcessing = false;
 
 			//Initialize time value
 			float timeValue = 0.0f;
@@ -180,18 +198,18 @@ int main(int argc, char* args[])
 						case SDLK_F: //Toggle flashlight
 							flashlightEnabled = !flashlightEnabled;
 
-							(*gShaders)[1].Use();
+							changeShader(1);
 							if(flashlightEnabled)
 							{
-								(*gShaders)[1].SetVec4("spotLight.ambient", gSpotLight.ambient);
-								(*gShaders)[1].SetVec4("spotLight.diffuse", gSpotLight.diffuse);
-								(*gShaders)[1].SetVec4("spotLight.specular", gSpotLight.specular);
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", gSpotLight.ambient);
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", gSpotLight.diffuse);
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", gSpotLight.specular);
 							}
 							else
 							{
-								(*gShaders)[1].SetVec4("spotLight.ambient", glm::vec4(0.0f));
-								(*gShaders)[1].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
-								(*gShaders)[1].SetVec4("spotLight.specular", glm::vec4(0.0f));
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
 							}
 							break;
 						case SDLK_O: //Toggle outline effect
@@ -205,6 +223,9 @@ int main(int argc, char* args[])
 								glDisable(GL_STENCIL_TEST);
 							}
 							break;
+						case SDLK_T: //Toggle postprocessing effect
+							applyPostProcessing = !applyPostProcessing;
+							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
 							{
@@ -215,8 +236,8 @@ int main(int argc, char* args[])
 									mixValue = 1.0f;
 								}
 								//Apply the new mix value
-								(*gShaders)[1].Use();
-								(*gShaders)[1].SetFloat("mixValue", mixValue);
+								changeShader(1);
+								(*gShaders)[gCurrentShaderIndex].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV: //Increase the FoV
 								gCamera->fov += 5.0f;
@@ -239,8 +260,8 @@ int main(int argc, char* args[])
 									mixValue = 0.0f;
 								}
 								//Apply the new mix value
-								(*gShaders)[1].Use();
-								(*gShaders)[1].SetFloat("mixValue", mixValue);
+								changeShader(1);
+								(*gShaders)[gCurrentShaderIndex].SetFloat("mixValue", mixValue);
 								break;
 							case InputState::FOV:
 								gCamera->fov -= 5.0f;
@@ -265,10 +286,16 @@ int main(int argc, char* args[])
 				//Handle camera keystate input
 				gCamera->HandleInput(SDL_Event{}, deltaTime, mouseCaptured, keyState);
 
+				//Use the created franebuffer
+				glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+
 				//Set the clear color
 				glClearColor(0.2f, 0.f, 0.2f, 1.0f);
-				//Clear the color buffer
+				//Clear the buffers
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+				//Enable depth testing
+				glEnable(GL_DEPTH_TEST);
 
 				//Set to polygon wireframe mode
 				//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -280,29 +307,29 @@ int main(int argc, char* args[])
 				}
 
 				//Enable the shader for the model
-				(*gShaders)[1].Use();
+				changeShader(1);
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
-
+				
 				//Define a projection matrix
 				glm::mat4 projection = glm::mat4(1.0f);
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
 				//Update the spotlight position and direction uniforms
-				(*gShaders)[1].Use();
-				(*gShaders)[1].SetVec3("spotLight.position", gCamera->position);
-				(*gShaders)[1].SetVec3("spotLight.direction", gCamera->direction);
+				changeShader(1);
+				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
 
 				//Update the view and projection matrices in the shader
-				(*gShaders)[1].SetMat4("view", view);
-				(*gShaders)[1].SetMat4("projection", projection);
+				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
+				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
 				//Disable writing to the stencil buffer
 				glStencilMask(0x00);
 
 				//Render the plane
-				gPlaneModel->Draw((*gShaders)[1]);
+				gPlaneModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
 				//Setup the stencil buffer operations for writing
 				glStencilFunc(GL_ALWAYS, 1, 0xFF);
@@ -311,7 +338,7 @@ int main(int argc, char* args[])
 				//Render the cubes
 				for (int i = 0; i < 2; ++i)
 				{
-					gCubeModels[i].Draw((*gShaders)[1]);
+					gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
 				}
 
 				if (outlineEffectEnabled)
@@ -325,11 +352,11 @@ int main(int argc, char* args[])
 					glDisable(GL_DEPTH_TEST);
 
 					//Use the border shader
-					(*gShaders)[4].Use();
+					changeShader(4);
 
 					//Update the view and projection matrices in the shader
-					(*gShaders)[4].SetMat4("view", view);
-					(*gShaders)[4].SetMat4("projection", projection);
+					(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
+					(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
 					//Render the scaled up cubes for the outline effect
 					for (int i = 0; i < 2; ++i)
@@ -341,7 +368,7 @@ int main(int argc, char* args[])
 						gCubeModels[i].setScale(originalScale * 1.1f);
 
 						//Draw the cube
-						gCubeModels[i].Draw((*gShaders)[4]);
+						gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
 
 						//Restore the original scale
 						gCubeModels[i].setScale(originalScale);
@@ -353,6 +380,9 @@ int main(int argc, char* args[])
 					//Reset the stencil buffer settings
 					glStencilMask(0xFF);
 					glStencilFunc(GL_ALWAYS, 1, 0xFF);
+
+					//Change the shader back to the main shader
+					changeShader(1);
 				}
 
 				//Create a sorted map of the glass planes based on distance from the camera
@@ -369,11 +399,41 @@ int main(int argc, char* args[])
 				//Render the glass planes in back-to-front order
 				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
 				{
-					it->second->Draw((*gShaders)[1]);
+					it->second->Draw((*gShaders)[gCurrentShaderIndex]);
 				}
 
 				//Re-enable face culling
 				glEnable(GL_CULL_FACE);
+
+				//Unbind the framebuffer to render to the screen
+				glBindFramebuffer(GL_FRAMEBUFFER, 0);
+				//Clear the screen
+				glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+				glClear(GL_COLOR_BUFFER_BIT);
+
+				if (applyPostProcessing)
+				{
+					//Use the post processing shader
+					changeShader(0);
+				}
+				else
+				{
+					//Use the simple texture shader
+					changeShader(2);
+				}
+
+				//Bind the screen quad VAO
+				glBindVertexArray(gScreenQuadVAO);
+
+				//Disable depth testing
+				glDisable(GL_DEPTH_TEST);
+
+				//Bind the framebuffer texture
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, gFBOTexture);
+
+				//Draw the screen quad
+				glDrawArrays(GL_TRIANGLES, 0, 6);
 
 				//Update screen
 				SDL_GL_SwapWindow(gWindow);
@@ -497,6 +557,63 @@ bool initGL()
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
+	//Generate a framebuffer object
+	glGenFramebuffers(1, &gFBO);
+	//Bind the framebuffer object
+	glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+
+	//Create a texture to serve as the framebuffer color attachment
+	glGenTextures(1, &gFBOTexture);
+	glBindTexture(GL_TEXTURE_2D, gFBOTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	//Unbind the texture
+	glBindTexture(GL_TEXTURE_2D, 0);
+	//Attach the texture to the framebuffer
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gFBOTexture, 0);
+
+	//Create a renderbuffer object for depth and stencil attachments
+	glGenRenderbuffers(1, &gRBO);
+	glBindRenderbuffer(GL_RENDERBUFFER, gRBO);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+	//Unbind the renderbuffer
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	//Attach the renderbuffer to the framebuffer
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gRBO);
+
+	//Check if the framebuffer's status is complete
+	GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if(framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+	{
+		KJK_ERROR("Framebuffer is not complete: {0}!", framebufferStatus);
+		success = false;
+	}
+
+	//Unbind the framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	//Setup the screen quad VAO and VBO
+	glGenVertexArrays(1, &gScreenQuadVAO);
+	glGenBuffers(1, &gScreenQuadVBO);
+	glBindVertexArray(gScreenQuadVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, gScreenQuadVBO);
+	float screenQuadVertices[] = {
+		//Positions   //TexCoords
+		-1.0f,  1.0f, 0.0f, 1.0f,
+		-1.0f, -1.0f, 0.0f, 0.0f,
+		 1.0f, -1.0f, 1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f, 1.0f,
+		 1.0f, -1.0f, 1.0f, 0.0f,
+		 1.0f,  1.0f, 1.0f, 1.0f
+	};
+	glBufferData(GL_ARRAY_BUFFER, sizeof(screenQuadVertices), &screenQuadVertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+	glBindVertexArray(0);
+
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
 	gDirectionalLight.ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
@@ -529,9 +646,9 @@ bool loadMedia()
 	//Create the shaders
 	gShaders.emplace(std::array<Shader, 5>
 	{
+		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/lightSourceShader.frag"),
+		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/BasicShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/BorderShader.frag")
 	});
@@ -539,8 +656,8 @@ bool loadMedia()
 	//Load two cube models
 	gCubeModels = new CubeModel[2]
 	{
-		CubeModel("assets/marble.jpg", "assets/marble.jpg"),
-		CubeModel("assets/marble.jpg", "assets/marble.jpg")
+		CubeModel("assets/container.jpg", "assets/container.jpg"),
+		CubeModel("assets/container.jpg", "assets/container.jpg")
 	};
 	//Set the positions of the cube models
 	gCubeModels[0].setPosition(glm::vec3(-1.5f, 0.0001f, -1.0f));
@@ -578,38 +695,42 @@ bool loadMedia()
 	}
 
 	//Use the first shader program
-	(*gShaders)[1].Use();
+	changeShader(1);
 
 	//Set color uniforms for the spotlight
-	(*gShaders)[1].SetVec4("spotLight.ambient", glm::vec4(0.0f));
-	(*gShaders)[1].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
-	(*gShaders)[1].SetVec4("spotLight.specular", glm::vec4(0.0f));
+	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
 	//Set spotlight cutoff angles
-	(*gShaders)[1].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-	(*gShaders)[1].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
+	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
 	//Set spotlight attenuation factors
-	(*gShaders)[1].SetFloat("spotLight.constant", 1.0f);
-	(*gShaders)[1].SetFloat("spotLight.linear", 0.045f);
-	(*gShaders)[1].SetFloat("spotLight.quadratic", 0.0075f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.constant", 1.0f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.linear", 0.045f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.0075f);
 
 	//Set color uniforms for the directional light
-	(*gShaders)[1].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-	(*gShaders)[1].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
-	(*gShaders)[1].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
-	(*gShaders)[1].SetVec4("dirLight.specular", gDirectionalLight.specular);
+	(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
+	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
+	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.specular", gDirectionalLight.specular);
 
 	//Set color uniforms for the point light
-	(*gShaders)[1].SetVec3("pointLights[0].position", gPointLights[0].position);
-	(*gShaders)[1].SetVec4("pointLights[0].ambient", gPointLights[0].ambient);
-	(*gShaders)[1].SetVec4("pointLights[0].diffuse", gPointLights[0].diffuse);
-	(*gShaders)[1].SetVec4("pointLights[0].specular", gPointLights[0].specular);
+	(*gShaders)[gCurrentShaderIndex].SetVec3("pointLights[0].position", gPointLights[0].position);
+	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].ambient", gPointLights[0].ambient);
+	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].diffuse", gPointLights[0].diffuse);
+	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].specular", gPointLights[0].specular);
 	//Set point light attenuation factors
-	(*gShaders)[1].SetFloat("pointLights[0].constant", 1.0f);
-	(*gShaders)[1].SetFloat("pointLights[0].linear", 0.09f);
-	(*gShaders)[1].SetFloat("pointLights[0].quadratic", 0.032f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].constant", 1.0f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.09f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.032f);
 
 	//Set material shininess
-	(*gShaders)[1].SetFloat("material.shininess", 32.0f);
+	(*gShaders)[gCurrentShaderIndex].SetFloat("material.shininess", 32.0f);
+
+	//Change to the framebuffer shader and set the texture uniform
+	changeShader(0);
+	(*gShaders)[gCurrentShaderIndex].SetInt("screenTexture", 0);
 
 	KJK_INFO("Loaded media!");
 
@@ -632,6 +753,15 @@ void close()
 	//Delete the plane model
 	delete gPlaneModel;
 
+	//Delete the glass models
+	delete[] gGlassPlaneModels;
+
+	//Delete the texture used for the framebuffer
+	glDeleteTextures(1, &gFBOTexture);
+
+	//Delete the framebuffer object
+	glDeleteFramebuffers(1, &gFBO);
+
 	//Destroy window
 	if (gWindow != nullptr)
 	{
@@ -643,4 +773,14 @@ void close()
 	SDL_Quit();
 
 	KJK_INFO("Exited the application!");
+}
+
+//Change the shader program
+void changeShader(GLint index)
+{
+	if(gShaders.has_value() && index >= 0 && index < static_cast<GLint>(gShaders->size()))
+	{
+		gCurrentShaderIndex = index;
+		(*gShaders)[gCurrentShaderIndex].Use();
+	}
 }
