@@ -137,8 +137,8 @@ void BaseModel::setBufferData(const std::vector<BaseVertex>& verts, const std::v
 void BaseModel::setup(const char* diffuseTexturePath, const char* specularTexturePath)
 {
 	//Load the textures
-	mDiffuseId = TextureFromFile(diffuseTexturePath);
-	mSpecularId = TextureFromFile(specularTexturePath);
+	mDiffuseId = textureFromFile(diffuseTexturePath);
+	mSpecularId = textureFromFile(specularTexturePath);
 
 	//Initialize vertices and indices
 	initializeBuffers();
@@ -177,7 +177,7 @@ void BaseModel::setup(const char* diffuseTexturePath, const char* specularTextur
 	glBindVertexArray(0);
 }
 
-GLuint BaseModel::TextureFromFile(const char* path)
+GLuint BaseModel::textureFromFile(const char* path)
 {
 	//Generate a texture ID
 	GLuint textureID{};

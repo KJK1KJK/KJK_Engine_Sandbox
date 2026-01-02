@@ -22,7 +22,6 @@ void close();
 //Change the shader program
 void changeShader(GLint shaderIndex);
 
-
 //Global variables
 int SCREEN_WIDTH{ 800 };
 int SCREEN_HEIGHT{ 600 };
@@ -44,12 +43,15 @@ GLuint gScreenQuadVAO{ 0 };
 GLuint gScreenQuadVBO{ 0 };
 
 //Shader program IDs
-std::optional<std::array<Shader, 5>> gShaders;
+std::optional<std::array<Shader, 8>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
 //Camera object
 Camera* gCamera;
+
+//Skybox cube
+CubeModel* gSkyboxCube;
 
 //Light color and position struct
 struct Light
@@ -79,6 +81,11 @@ PlaneModel* gPlaneModel;
 
 //Glass objects
 PlaneModel* gGlassPlaneModels;
+
+//Reflective cube object
+CubeModel* gReflectiveCubeModel;
+//Refractive cube object
+CubeModel* gRefractiveCubeModel;
 
 //The main function
 int main(int argc, char* args[])
@@ -341,6 +348,73 @@ int main(int argc, char* args[])
 					gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
 				}
 
+				//Disable writing to the stencil buffer
+				glStencilMask(0x00);
+
+				//Change the shader for the reflective cube
+				changeShader(6);
+
+				//Update the view and projection matrices in the shader
+				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
+				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+
+				//Render the reflective cube
+				gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+				//Change the shader for the refractive cube
+				changeShader(7);
+
+				//Update the view and projection matrices in the shader
+				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
+				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+
+				//Render the refractive cube
+				gRefractiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+				//Change the depth function to allow skybox depth values to pass
+				glDepthFunc(GL_LEQUAL);
+				//Disable face culling
+				glDisable(GL_CULL_FACE);
+				//Disbale writng to the depth buffer
+				glDepthMask(GL_FALSE);
+
+				//Use the skybox shader
+				changeShader(5);
+
+				//Set the view and projection matrices for the skybox
+				glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); //Remove translation from the view matrix
+				(*gShaders)[gCurrentShaderIndex].SetMat4("view", skyboxView);
+				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+
+				//Render the skybox cube
+				gSkyboxCube->Draw((*gShaders)[gCurrentShaderIndex]);
+
+				//Reset the depth function
+				glDepthFunc(GL_LESS);
+
+				//Use the main shader
+				changeShader(1);
+
+				//Create a sorted map of the glass planes based on distance from the camera
+				std::map<float, PlaneModel*> sorted;
+				for (GLuint i = 0; i < 5; ++i)
+				{
+					float distance = glm::length(gCamera->position - gGlassPlaneModels[i].getPosition());
+					sorted[distance] = &gGlassPlaneModels[i];
+				}
+
+				//Render the glass planes in back-to-front order
+				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+				{
+					it->second->Draw((*gShaders)[gCurrentShaderIndex]);
+				}
+
+				//Re-enable face culling
+				glEnable(GL_CULL_FACE);
+				//Re-enable writing to the depth buffer
+				glDepthMask(GL_TRUE);
+
+				//Draw an outline effect around the cubes
 				if (outlineEffectEnabled)
 				{
 					//Setup the stencil buffer operations for the outline effect
@@ -384,26 +458,6 @@ int main(int argc, char* args[])
 					//Change the shader back to the main shader
 					changeShader(1);
 				}
-
-				//Create a sorted map of the glass planes based on distance from the camera
-				std::map<float, PlaneModel*> sorted;
-				for (GLuint i = 0; i < 5; ++i)
-				{
-					float distance = glm::length(gCamera->position - gGlassPlaneModels[i].getPosition());
-					sorted[distance] = &gGlassPlaneModels[i];
-				}
-
-				//Disable face culling for the glass planes
-				glDisable(GL_CULL_FACE);
-
-				//Render the glass planes in back-to-front order
-				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
-				{
-					it->second->Draw((*gShaders)[gCurrentShaderIndex]);
-				}
-
-				//Re-enable face culling
-				glEnable(GL_CULL_FACE);
 
 				//Unbind the framebuffer to render to the screen
 				glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -644,13 +698,16 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 5>
+	gShaders.emplace(std::array<Shader, 8>
 	{
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/BasicShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/DistanceShader.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/BorderShader.frag")
+		Shader("assets/shaders/shader.vert", "assets/shaders/BorderShader.frag"),
+		Shader("assets/shaders/Cubemap.vert", "assets/shaders/Cubemap.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/ReflectiveShader.frag"),
+		Shader("assets/shaders/shader.vert", "assets/shaders/RefractiveShader.frag")
 	});
 
 	//Load two cube models
@@ -693,6 +750,51 @@ bool loadMedia()
 		//Rotate the grass models so they stand upright
 		gGlassPlaneModels[i].setRotation(glm::vec3(90.0f, 0.0f, 0.0f));
 	}
+
+	//Load the skybox cube
+	gSkyboxCube = new CubeModel(nullptr, nullptr, false,
+		std::vector<std::string>
+		{
+			"assets/skybox/right.jpg",
+			"assets/skybox/left.jpg",
+			"assets/skybox/top.jpg",
+			"assets/skybox/bottom.jpg",
+			"assets/skybox/front.jpg",
+			"assets/skybox/back.jpg"
+		}
+	);
+	//Set the scale of the skybox cube
+	gSkyboxCube->setScale(glm::vec3(2.0f, 2.0f, 2.0f));
+
+	//Load the reflective cube model
+	gReflectiveCubeModel = new CubeModel(nullptr, nullptr, false,
+		std::vector<std::string>
+		{
+			"assets/skybox/right.jpg",
+			"assets/skybox/left.jpg",
+			"assets/skybox/top.jpg",
+			"assets/skybox/bottom.jpg",
+			"assets/skybox/front.jpg",
+			"assets/skybox/back.jpg"
+		}
+	);
+	//Set the position of the reflective cube model
+	gReflectiveCubeModel->setPosition(glm::vec3(0.0f, 5.0f, -2.0f));
+
+	//Load the refractive cube model
+	gRefractiveCubeModel = new CubeModel(nullptr, nullptr, false,
+		std::vector<std::string>
+		{
+			"assets/skybox/right.jpg",
+			"assets/skybox/left.jpg",
+			"assets/skybox/top.jpg",
+			"assets/skybox/bottom.jpg",
+			"assets/skybox/front.jpg",
+			"assets/skybox/back.jpg"
+		}
+	);
+	//Set the position of the refractive cube model
+	gRefractiveCubeModel->setPosition(glm::vec3(4.0f, 5.0f, 0.0f));
 
 	//Use the first shader program
 	changeShader(1);
@@ -755,6 +857,21 @@ void close()
 
 	//Delete the glass models
 	delete[] gGlassPlaneModels;
+
+	//Delete the skybox cube
+	delete gSkyboxCube;
+
+	//Delete the reflective cube model
+	delete gReflectiveCubeModel;
+	//Delete the refractive cube model
+	delete gRefractiveCubeModel;
+
+	//Delete the screen quad VAO and VBO
+	glDeleteVertexArrays(1, &gScreenQuadVAO);
+	glDeleteBuffers(1, &gScreenQuadVBO);
+
+	//Delete the renderbuffer object
+	glDeleteRenderbuffers(1, &gRBO);
 
 	//Delete the texture used for the framebuffer
 	glDeleteTextures(1, &gFBOTexture);

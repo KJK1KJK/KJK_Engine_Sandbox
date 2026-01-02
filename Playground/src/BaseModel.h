@@ -73,5 +73,5 @@ protected:
 	virtual void initializeBuffers() = 0;
 
 	//Load a texture from file
-	GLuint TextureFromFile(const char* path);
+	GLuint textureFromFile(const char* path);
 };
