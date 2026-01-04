@@ -47,6 +47,9 @@ std::optional<std::array<Shader, 8>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
+//Uniform buffer object ID for matrices
+GLuint gMatricesUBO{ 0 };
+
 //Camera object
 Camera* gCamera;
 
@@ -328,9 +331,11 @@ int main(int argc, char* args[])
 				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
 				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
 
-				//Update the view and projection matrices in the shader
-				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
-				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+				//Update the view and projection matrices in the UBO
+				glBindBuffer(GL_UNIFORM_BUFFER, gMatricesUBO);
+				glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
+				glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
+				glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
 				//Disable writing to the stencil buffer
 				glStencilMask(0x00);
@@ -351,22 +356,25 @@ int main(int argc, char* args[])
 				//Disable writing to the stencil buffer
 				glStencilMask(0x00);
 
+				//Set the model matrix for the detailed model
+				glm::mat4 model = glm::mat4(1.0f);
+				//Move the model back a bit
+				model = glm::translate(model, glm::vec3(2.0f, -0.15f, -2.5f));
+				//Scale the model down
+				model = glm::scale(model, glm::vec3(0.2f));
+				//Set the model matrix uniform
+				(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+				//Render the detailed model
+				gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
 				//Change the shader for the reflective cube
 				changeShader(6);
-
-				//Update the view and projection matrices in the shader
-				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
-				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
 				//Render the reflective cube
 				gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
 				//Change the shader for the refractive cube
 				changeShader(7);
-
-				//Update the view and projection matrices in the shader
-				(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
-				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
 				//Render the refractive cube
 				gRefractiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
@@ -427,10 +435,6 @@ int main(int argc, char* args[])
 
 					//Use the border shader
 					changeShader(4);
-
-					//Update the view and projection matrices in the shader
-					(*gShaders)[gCurrentShaderIndex].SetMat4("view", view);
-					(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
 					//Render the scaled up cubes for the outline effect
 					for (int i = 0; i < 2; ++i)
@@ -647,6 +651,14 @@ bool initGL()
 	//Unbind the framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+	//Generate the UBO for matrices
+	glGenBuffers(1, &gMatricesUBO);
+	glBindBuffer(GL_UNIFORM_BUFFER, gMatricesUBO);
+	glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+	//Bind the UBO to binding point 0
+	glBindBufferRange(GL_UNIFORM_BUFFER, 0, gMatricesUBO, 0, 2 * sizeof(glm::mat4));
+
 	//Setup the screen quad VAO and VBO
 	glGenVertexArrays(1, &gScreenQuadVAO);
 	glGenBuffers(1, &gScreenQuadVBO);
@@ -795,6 +807,9 @@ bool loadMedia()
 	);
 	//Set the position of the refractive cube model
 	gRefractiveCubeModel->setPosition(glm::vec3(4.0f, 5.0f, 0.0f));
+
+	//Load the detailed model
+	gModel = new Model("assets/backpack/backpack.obj");
 
 	//Use the first shader program
 	changeShader(1);

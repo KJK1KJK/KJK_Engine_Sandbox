@@ -6,7 +6,12 @@ in vec3 fragPos;
 
 uniform vec3 cameraPos;
 uniform samplerCube skybox;
-uniform mat4 view;
+
+layout (std140, binding = 0) uniform Matrices
+{
+	uniform mat4 projection;
+	uniform mat4 view;
+};
 
 void main()
 {

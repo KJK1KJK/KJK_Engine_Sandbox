@@ -10,9 +10,12 @@ out vec2 texCoords;
 
 uniform float textureScale;
 
+layout (std140, binding = 0) uniform Matrices
+{
+	uniform mat4 projection;
+	uniform mat4 view;
+};
 uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
 
 struct DirLight
 {
