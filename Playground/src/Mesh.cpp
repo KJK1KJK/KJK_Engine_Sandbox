@@ -103,6 +103,9 @@ void Mesh::Draw(const Shader& shader) const
 		glBindTexture(GL_TEXTURE_2D, textures[i].id);
 	}
 
+	//Set the default texture scale uniform
+	shader.SetFloat("textureScale", 1.0f);
+
 	//Set the material shininess uniform
 	shader.SetFloat("material.shininess", material.shininess);
 

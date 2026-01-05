@@ -22,6 +22,11 @@ void close();
 //Change the shader program
 void changeShader(GLint shaderIndex);
 
+//Render example scene
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection);
+//Render space scene
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection);
+
 //Global variables
 int SCREEN_WIDTH{ 800 };
 int SCREEN_HEIGHT{ 600 };
@@ -43,7 +48,7 @@ GLuint gScreenQuadVAO{ 0 };
 GLuint gScreenQuadVBO{ 0 };
 
 //Shader program IDs
-std::optional<std::array<Shader, 10>> gShaders;
+std::optional<std::array<Shader, 11>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
@@ -73,8 +78,19 @@ Light gSpotLight;
 //Point lights array
 std::array<Light, 1> gPointLights;
 
-//Model object
+//Detailed model object
 Model* gModel;
+
+//Planet model object
+Model* gPlanetModel;
+//Asteroid model object
+Model* gAsteroidModel;
+//Asteroid instances model matrices
+glm::mat4* gAsteroidModelMatrices;
+//Define the amount of asteroids to instantiate
+GLuint gAsteroidInstanceAmount = 10000;
+//Asteroid instance VBO
+GLuint gAsteroidInstanceVBO{ 0 };
 
 //Cube model objects
 CubeModel* gCubeModels;
@@ -147,6 +163,9 @@ int main(int argc, char* args[])
 			//Show normal vectors setting
 			bool showNormals = false;
 
+			//Current selected scene setting
+			int currentScene = 0;
+
 			//Initialize time value
 			float timeValue = 0.0f;
 
@@ -155,7 +174,8 @@ int main(int argc, char* args[])
 			{
 				NONE,
 				MIX,
-				FOV
+				FOV,
+				SCENE
 			} inputState{InputState::NONE};
 
 			//While application is running
@@ -200,6 +220,9 @@ int main(int argc, char* args[])
 							break;
 						case SDLK_2: //Enable FoV control
 							inputState = InputState::FOV;
+							break;
+						case SDLK_3: //Enable scene change control
+							inputState = InputState::SCENE;
 							break;
 						case SDLK_M: //Switch mouse capture mode
 							mouseCaptured = !mouseCaptured;
@@ -262,6 +285,11 @@ int main(int argc, char* args[])
 									gCamera->fov = 360.0f;
 								}
 								break;
+							case InputState::SCENE: //Change scene up
+								currentScene++;
+								if (currentScene > 1)
+									currentScene = 1;
+								break;
 							default:
 								break;
 							}
@@ -286,6 +314,11 @@ int main(int argc, char* args[])
 									gCamera->fov = 0.0f;
 								}
 								break;
+							case InputState::SCENE: //Change scene down
+								currentScene--;
+								if (currentScene < 0)
+									currentScene = 0;
+								break;
 							default:
 								break;
 							}
@@ -306,7 +339,7 @@ int main(int argc, char* args[])
 				glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
 
 				//Set the clear color
-				glClearColor(0.2f, 0.f, 0.2f, 1.0f);
+				glClearColor(0.05f, 0.0f, 0.05f, 1.0f);
 				//Clear the buffers
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
@@ -321,9 +354,6 @@ int main(int argc, char* args[])
 				{
 					timeValue += deltaTime;
 				}
-
-				//Enable the shader for the model
-				changeShader(1);
 				
 				//Define a view matrix
 				glm::mat4 view = gCamera->GetViewMatrix();
@@ -332,164 +362,24 @@ int main(int argc, char* args[])
 				glm::mat4 projection = glm::mat4(1.0f);
 				projection = glm::perspective(glm::radians(gCamera->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
 
-				//Update the spotlight position and direction uniforms
-				changeShader(1);
-				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
-				(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
-
 				//Update the view and projection matrices in the UBO
 				glBindBuffer(GL_UNIFORM_BUFFER, gMatricesUBO);
 				glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
 				glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
 				glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-				//Disable writing to the stencil buffer
-				glStencilMask(0x00);
-
-				//Render the plane
-				gPlaneModel->Draw((*gShaders)[gCurrentShaderIndex]);
-
-				//Setup the stencil buffer operations for writing
-				glStencilFunc(GL_ALWAYS, 1, 0xFF);
-				glStencilMask(0xFF);
-
-				//Render the cubes
-				for (int i = 0; i < 2; ++i)
+				//Check scene number and render the correct scene
+				switch (currentScene)
 				{
-					gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
-				}
-
-				//Disable writing to the stencil buffer
-				glStencilMask(0x00);
-
-				//Disable face culling
-				glDisable(GL_CULL_FACE);
-
-				//Change the shader to use the explosion geometry effect
-				changeShader(8);
-
-				//Set the time uniform
-				(*gShaders)[gCurrentShaderIndex].SetFloat("time", glm::radians(-90.0f));
-
-				//Set the model matrix for the detailed model
-				glm::mat4 model = glm::mat4(1.0f);
-				//Move the model back a bit
-				model = glm::translate(model, glm::vec3(2.0f, -0.15f, -2.5f));
-				//Scale the model down
-				model = glm::scale(model, glm::vec3(0.2f));
-				//Set the model matrix uniform
-				(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
-				//Render the detailed model
-				gModel->Draw((*gShaders)[gCurrentShaderIndex]);
-
-				if(showNormals)
-				{
-					//Change the shader to show normal vectors
-					changeShader(9);
-
-					//Set the model matrix uniform
-					(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
-					//Render the detailed model
-					gModel->Draw((*gShaders)[gCurrentShaderIndex]);
-				}
-
-				//Re-enable face culling
-				glEnable(GL_CULL_FACE);
-
-				//Change the shader for the reflective cube
-				changeShader(6);
-
-				//Render the reflective cube
-				gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
-
-				//Change the shader for the refractive cube
-				changeShader(7);
-
-				//Render the refractive cube
-				gRefractiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
-
-				//Change the depth function to allow skybox depth values to pass
-				glDepthFunc(GL_LEQUAL);
-				//Disable face culling
-				glDisable(GL_CULL_FACE);
-				//Disbale writng to the depth buffer
-				glDepthMask(GL_FALSE);
-
-				//Use the skybox shader
-				changeShader(5);
-
-				//Set the view and projection matrices for the skybox
-				glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); //Remove translation from the view matrix
-				(*gShaders)[gCurrentShaderIndex].SetMat4("view", skyboxView);
-				(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
-
-				//Render the skybox cube
-				gSkyboxCube->Draw((*gShaders)[gCurrentShaderIndex]);
-
-				//Reset the depth function
-				glDepthFunc(GL_LESS);
-
-				//Use the main shader
-				changeShader(1);
-
-				//Create a sorted map of the glass planes based on distance from the camera
-				std::map<float, PlaneModel*> sorted;
-				for (GLuint i = 0; i < 5; ++i)
-				{
-					float distance = glm::length(gCamera->position - gGlassPlaneModels[i].getPosition());
-					sorted[distance] = &gGlassPlaneModels[i];
-				}
-
-				//Render the glass planes in back-to-front order
-				for(auto it = sorted.rbegin(); it != sorted.rend(); ++it)
-				{
-					it->second->Draw((*gShaders)[gCurrentShaderIndex]);
-				}
-
-				//Re-enable face culling
-				glEnable(GL_CULL_FACE);
-				//Re-enable writing to the depth buffer
-				glDepthMask(GL_TRUE);
-
-				//Draw an outline effect around the cubes
-				if (outlineEffectEnabled)
-				{
-					//Setup the stencil buffer operations for the outline effect
-					glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-					//Disable writing to the stencil buffer
-					glStencilMask(0x00);
-
-					//Disable the depth buffer operations
-					glDisable(GL_DEPTH_TEST);
-
-					//Use the border shader
-					changeShader(4);
-
-					//Render the scaled up cubes for the outline effect
-					for (int i = 0; i < 2; ++i)
-					{
-						//Save the original scale
-						glm::vec3 originalScale = gCubeModels[i].getScale();
-
-						//Set the new scale
-						gCubeModels[i].setScale(originalScale * 1.1f);
-
-						//Draw the cube
-						gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
-
-						//Restore the original scale
-						gCubeModels[i].setScale(originalScale);
-					}
-
-					//Re-enable depth buffer writing
-					glEnable(GL_DEPTH_TEST);
-
-					//Reset the stencil buffer settings
-					glStencilMask(0xFF);
-					glStencilFunc(GL_ALWAYS, 1, 0xFF);
-
-					//Change the shader back to the main shader
-					changeShader(1);
+				case 0:
+					renderSpaceScene(timeValue, view, projection);
+					break;
+				case 1:
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, view, projection);
+					break;
+				default:
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, view, projection);
+					break;
 				}
 
 				//Unbind the framebuffer to render to the screen
@@ -722,7 +612,7 @@ bool initGL()
 	gSpotLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	//Define the point lights properties
-	gPointLights[0].position = glm::vec3(10.0f, 10.5f, 10.0f);
+	gPointLights[0].position = glm::vec3(1000.0f, 1000.5f, 1000.0f);
 	gPointLights[0].ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
 	gPointLights[0].diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
 	gPointLights[0].specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -739,7 +629,7 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 10>
+	gShaders.emplace(std::array<Shader, 11>
 	{
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
@@ -750,7 +640,8 @@ bool loadMedia()
 		Shader("assets/shaders/shader.vert", "assets/shaders/ReflectiveShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/RefractiveShader.frag"),
 		Shader("assets/shaders/shaderExplode.vert", "assets/shaders/explode.geom", "assets/shaders/shader2.frag"),
-		Shader("assets/shaders/NormalVectorShader.vert", "assets/shaders/NormalVectorShader.geom", "assets/shaders/NormalVectorShader.frag")
+		Shader("assets/shaders/NormalVectorShader.vert", "assets/shaders/NormalVectorShader.geom", "assets/shaders/NormalVectorShader.frag"),
+		Shader("assets/shaders/InstanceShader.vert", "assets/shaders/InstanceShader.frag")
 	});
 
 	//Load two cube models
@@ -842,11 +733,97 @@ bool loadMedia()
 	//Load the detailed model
 	gModel = new Model("assets/backpack/backpack.obj");
 
+	//Load the planet model
+	gPlanetModel = new Model("assets/planet/planet.obj");
+	//Load the asteroid model
+	gAsteroidModel = new Model("assets/rock/rock.obj");
+
+	//Create the array to store their posiotions
+	gAsteroidModelMatrices = new glm::mat4[gAsteroidInstanceAmount];
+	//Initialize a random seed
+	srand(SDL_GetTicks());
+	//Declare the model variables
+	float radius = 60.0f;
+	float offset = 10.0f;
+	
+	//Iterate over each instatnce to set their unique translations, scale and rotations
+	for (GLuint i = 0; i < gAsteroidInstanceAmount; i++)
+	{
+		//Initialize the model matrix
+		glm::mat4 model = glm::mat4(1.0f);
+
+		//Calculate random displacement along a circle
+		float angle = (float)i / (float)gAsteroidInstanceAmount * 360.f;
+		float displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+		float x = sin(angle) * radius + displacement;
+		displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+		float y = displacement * 0.4f;
+		displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
+		float z = cos(angle) * radius + displacement;
+		//Apply translation
+		model = glm::translate(model, glm::vec3(x, y, z));
+
+		//Calculate a random scale
+		float scale = (rand() % 20) / 100.0f + 0.05f;
+		//Apply the scale
+		model = glm::scale(model, glm::vec3(scale));
+
+		//Calculate a random rotation
+		float rotX = (rand() % 360);
+		float rotY = (rand() % 360);
+		float rotZ = (rand() % 360);
+		//Apply the rotation
+		model = glm::rotate(model, rotX, glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, rotY, glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::rotate(model, rotZ, glm::vec3(0.0f, 0.0f, 1.0f));
+
+		//Add to the list of matrices
+		gAsteroidModelMatrices[i] = model;
+	}
+
+	//Generate a vertex buffer object for the asteroid instance matrices
+	glGenBuffers(1, &gAsteroidInstanceVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, gAsteroidInstanceVBO);
+	//Fill the buffer with the model matrices
+	glBufferData(GL_ARRAY_BUFFER, gAsteroidInstanceAmount * sizeof(glm::mat4), &gAsteroidModelMatrices[0], GL_STATIC_DRAW);
+
+	//Configure the vertex attributes for each asteroid mesh
+	for (GLuint i = 0; i < gAsteroidModel->GetMeshes().size(); i++)
+	{
+		//Get a vertex array object id for the model mesh
+		GLuint vao = gAsteroidModel->GetMeshes()[i].GetVAO();
+		//Bind the vertex array
+		glBindVertexArray(vao);
+
+		//Update the vertex attributes with the information about the model matrices
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
+		glEnableVertexAttribArray(4);
+		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(1 * sizeof(glm::vec4)));
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(2 * sizeof(glm::vec4)));
+		glEnableVertexAttribArray(6);
+		glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(3 * sizeof(glm::vec4)));
+
+		//Tell OpenGl when to update the context of the vertex attribute
+		glVertexAttribDivisor(3, 1);
+		glVertexAttribDivisor(4, 1);
+		glVertexAttribDivisor(5, 1);
+		glVertexAttribDivisor(6, 1);
+
+		//Unbind the vertex array
+		glBindVertexArray(0);
+	}
+
+
 	//Iterate over the 1st and 8th shader programs
-	for (GLint i : {1, 8})
+	for (GLint i : {1, 8, 10})
 	{
 		//Use a shader program
 		changeShader(i);
+
+		//Set the texture scale uniform
+		(*gShaders)[gCurrentShaderIndex].SetFloat("textureScale", 1.0f);
 
 		//Set color uniforms for the spotlight
 		(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
@@ -899,6 +876,11 @@ void close()
 	//Delete the model
 	delete gModel;
 
+	//Delete the space scene objects
+	delete gPlanetModel;
+	delete gAsteroidModel;
+	delete[] gAsteroidModelMatrices;
+
 	//Delete the cube models
 	delete[] gCubeModels;
 
@@ -929,6 +911,9 @@ void close()
 	//Delete the framebuffer object
 	glDeleteFramebuffers(1, &gFBO);
 
+	//Delete the asteroid instance VBO
+	glDeleteBuffers(1, &gAsteroidInstanceVBO);
+
 	//Destroy window
 	if (gWindow != nullptr)
 	{
@@ -950,4 +935,230 @@ void changeShader(GLint index)
 		gCurrentShaderIndex = index;
 		(*gShaders)[gCurrentShaderIndex].Use();
 	}
+}
+
+//Render an example scene that showcases many OpenGL techniques.
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection)
+{
+	//Enable the shader for the model
+	changeShader(1);
+
+	//Update the spotlight position and direction uniforms
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+
+	//Disable writing to the stencil buffer
+	glStencilMask(0x00);
+
+	//Render the plane
+	gPlaneModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	//Setup the stencil buffer operations for writing
+	glStencilFunc(GL_ALWAYS, 1, 0xFF);
+	glStencilMask(0xFF);
+
+	//Render the cubes
+	for (int i = 0; i < 2; ++i)
+	{
+		gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
+	}
+
+	//Disable writing to the stencil buffer
+	glStencilMask(0x00);
+
+	//Disable face culling
+	glDisable(GL_CULL_FACE);
+
+	//Change the shader to use the explosion geometry effect
+	changeShader(8);
+
+	//Set the time uniform
+	(*gShaders)[gCurrentShaderIndex].SetFloat("time", glm::radians(timeValue / 3.0f));
+
+	//Set the model matrix for the detailed model
+	glm::mat4 model = glm::mat4(1.0f);
+	//Move the model back a bit
+	model = glm::translate(model, glm::vec3(2.0f, -0.15f, -2.5f));
+	//Scale the model down
+	model = glm::scale(model, glm::vec3(0.2f));
+	//Set the model matrix uniform
+	(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+	//Render the detailed model
+	gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	if (showNormals)
+	{
+		//Change the shader to show normal vectors
+		changeShader(9);
+
+		//Set the model matrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+		//Render the detailed model
+		gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+	}
+
+	//Re-enable face culling
+	glEnable(GL_CULL_FACE);
+
+	//Change the shader for the reflective cube
+	changeShader(6);
+
+	//Render the reflective cube
+	gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	//Change the shader for the refractive cube
+	changeShader(7);
+
+	//Render the refractive cube
+	gRefractiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	//Change the depth function to allow skybox depth values to pass
+	glDepthFunc(GL_LEQUAL);
+	//Disable face culling
+	glDisable(GL_CULL_FACE);
+	//Disbale writng to the depth buffer
+	glDepthMask(GL_FALSE);
+
+	//Use the skybox shader
+	changeShader(5);
+
+	//Set the view and projection matrices for the skybox
+	glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); //Remove translation from the view matrix
+	(*gShaders)[gCurrentShaderIndex].SetMat4("view", skyboxView);
+	(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+
+	//Render the skybox cube
+	gSkyboxCube->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	//Reset the depth function
+	glDepthFunc(GL_LESS);
+
+	//Use the main shader
+	changeShader(1);
+
+	//Create a sorted map of the glass planes based on distance from the camera
+	std::map<float, PlaneModel*> sorted;
+	for (GLuint i = 0; i < 5; ++i)
+	{
+		float distance = glm::length(gCamera->position - gGlassPlaneModels[i].getPosition());
+		sorted[distance] = &gGlassPlaneModels[i];
+	}
+
+	//Render the glass planes in back-to-front order
+	for (auto it = sorted.rbegin(); it != sorted.rend(); ++it)
+	{
+		it->second->Draw((*gShaders)[gCurrentShaderIndex]);
+	}
+
+	//Re-enable face culling
+	glEnable(GL_CULL_FACE);
+	//Re-enable writing to the depth buffer
+	glDepthMask(GL_TRUE);
+
+	//Draw an outline effect around the cubes
+	if (outlineEffectEnabled)
+	{
+		//Setup the stencil buffer operations for the outline effect
+		glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+		//Disable writing to the stencil buffer
+		glStencilMask(0x00);
+
+		//Disable the depth buffer operations
+		glDisable(GL_DEPTH_TEST);
+
+		//Use the border shader
+		changeShader(4);
+
+		//Render the scaled up cubes for the outline effect
+		for (int i = 0; i < 2; ++i)
+		{
+			//Save the original scale
+			glm::vec3 originalScale = gCubeModels[i].getScale();
+
+			//Set the new scale
+			gCubeModels[i].setScale(originalScale * 1.1f);
+
+			//Draw the cube
+			gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
+
+			//Restore the original scale
+			gCubeModels[i].setScale(originalScale);
+		}
+
+		//Re-enable depth buffer writing
+		glEnable(GL_DEPTH_TEST);
+
+		//Reset the stencil buffer settings
+		glStencilMask(0xFF);
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+
+		//Change the shader back to the main shader
+		changeShader(1);
+	}
+}
+
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection)
+{
+	//Enable the default shader
+	changeShader(1);
+
+	//Ensure the stencil buffer is configured to always pass
+	glStencilFunc(GL_ALWAYS, 1, 0xFF);
+	glStencilMask(0xFF);
+
+	//Update the spotlight position and direction uniforms
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+
+	//Declare the model matrix for the planet
+	glm::mat4 model = glm::mat4(1.0f);
+	//Apply transformations to the model matrix
+	model = glm::translate(model, glm::vec3(0.0f, -3.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(4.0f));
+
+	//Set the model matrix uniform
+	(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+
+	//Render the planet model
+	gPlanetModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+	//Switch to the instance shader
+	changeShader(10);
+
+	//Update the spotlight position and direction uniforms for instance shader
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+
+
+	//Draw the asteroids using instanced rendering
+	for(GLuint i = 0; i < gAsteroidModel->GetMeshes().size(); i++)
+	{
+		//Bind textures
+		unsigned int diffuseNr = 1;
+		unsigned int specularNr = 1;
+		const auto& textures = gAsteroidModel->GetMeshes()[i].textures;
+		for (unsigned int j = 0; j < textures.size(); j++)
+		{
+			glActiveTexture(GL_TEXTURE0 + j);
+			std::string number;
+			std::string name = textures[j].type;
+			if (name == "texture_diffuse")
+				number = std::to_string(diffuseNr++);
+			else if (name == "texture_specular")
+				number = std::to_string(specularNr++);
+
+			(*gShaders)[gCurrentShaderIndex].SetInt((name + number).c_str(), j);
+			glBindTexture(GL_TEXTURE_2D, textures[j].id);
+		}
+		glActiveTexture(GL_TEXTURE0);
+
+		//Bind the rock mesh VAO
+		glBindVertexArray(gAsteroidModel->GetMeshes()[i].GetVAO());
+
+		//Draw the asteroid model
+		glDrawElementsInstanced(GL_TRIANGLES, gAsteroidModel->GetMeshes()[i].indices.size(), GL_UNSIGNED_INT, 0, gAsteroidInstanceAmount);
+	}
+
+	//Unbind the VAO
+	glBindVertexArray(0);
 }
