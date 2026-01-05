@@ -5,81 +5,18 @@
 
 Shader::Shader(const GLchar* vertexPath, const GLchar* fragmentPath)
 {
-	//Variables necessary for reading shader files
-	std::string vertexCode;
-	std::string fragmentCode;
-	std::ifstream vShaderFile;
-	std::ifstream fShaderFile;
-	//Ensure ifstream objects can throw exceptions
-	vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	try
-	{
-		//Open the shader files
-		vShaderFile.open(vertexPath);
-		fShaderFile.open(fragmentPath);
-
-		//Declare string streams to hold shader code
-		std::stringstream vShaderStream, fShaderStream;
-
-		//Read file's buffer contents into streams
-		vShaderStream << vShaderFile.rdbuf();
-		fShaderStream << fShaderFile.rdbuf();
-
-		//Close the file handlers
-		vShaderFile.close();
-		fShaderFile.close();
-
-		//Convert stream into string
-		vertexCode = vShaderStream.str();
-		fragmentCode = fShaderStream.str();
-	}
-	catch (std::ifstream::failure& e)
-	{
-		KJK_ERROR("ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ: {0}", e.what());
-	}
-
-	//Convert strings to GLchar pointers
-	const GLchar* vShaderCode = vertexCode.c_str();
-	const GLchar* fShaderCode = fragmentCode.c_str();
-
-	//Declare the shader ID variables
-	GLuint vertex{ 0 }, fragment{ 0 };
-
-	//Create and compile vertex shader
-	vertex = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertex, 1, &vShaderCode, NULL);
-	glCompileShader(vertex);
-
-	//Check for vertex shader compile errors
-	GLint shaderCompiled = GL_FALSE;
-	glGetShaderiv(vertex, GL_COMPILE_STATUS, &shaderCompiled);
-	if (shaderCompiled != GL_TRUE)
-	{
-		KJK_ERROR("Unable to compile vertex shader {0}!", vertex);
-		PrintShaderLog(vertex);
-	}
-
-	//Create and compile fragment shader
-	fragment = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragment, 1, &fShaderCode, NULL);
-	glCompileShader(fragment);
-
-	//Check for fragment shader compile errors
-	shaderCompiled = GL_FALSE;
-	glGetShaderiv(fragment, GL_COMPILE_STATUS, &shaderCompiled);
-	if (shaderCompiled != GL_TRUE)
-	{
-		KJK_ERROR("Unable to compile fragment shader {0}!", fragment);
-		PrintShaderLog(fragment);
-	}
-
 	//Create a shader program
 	ID = glCreateProgram();
 
-	//Attach shaders to the program
+	//Load and compile the vertex shader
+	GLuint vertex = loadAndCompileShader(vertexPath, GL_VERTEX_SHADER);
+	//Load and compile the fragment shader
+	GLuint fragment = loadAndCompileShader(fragmentPath, GL_FRAGMENT_SHADER);
+
+	//Attach the shaders to the program
 	glAttachShader(ID, vertex);
 	glAttachShader(ID, fragment);
+	//Link the shader program
 	glLinkProgram(ID);
 
 	//Check for linking errors
@@ -93,6 +30,40 @@ Shader::Shader(const GLchar* vertexPath, const GLchar* fragmentPath)
 
 	//Delete the shaders as they're linked into the program now and are no longer necessary
 	glDeleteShader(vertex);
+	glDeleteShader(fragment);
+}
+
+Shader::Shader(const GLchar* vertexPath, const GLchar* geometryPath, const GLchar* fragmentPath)
+{
+	//Create a shader program
+	ID = glCreateProgram();
+
+	//Load and compile the vertex shader
+	GLuint vertex = loadAndCompileShader(vertexPath, GL_VERTEX_SHADER);
+	//Load and compile the geometry shader
+	GLuint geometry = loadAndCompileShader(geometryPath, GL_GEOMETRY_SHADER);
+	//Load and compile the fragment shader
+	GLuint fragment = loadAndCompileShader(fragmentPath, GL_FRAGMENT_SHADER);
+
+	//Attach the shaders to the program
+	glAttachShader(ID, vertex);
+	glAttachShader(ID, geometry);
+	glAttachShader(ID, fragment);
+	//Link the shader program
+	glLinkProgram(ID);
+
+	//Check for linking errors
+	GLint programLinked = GL_TRUE;
+	glGetProgramiv(ID, GL_LINK_STATUS, &programLinked);
+	if (programLinked != GL_TRUE)
+	{
+		KJK_ERROR("Error linking program {0}!", ID);
+		printProgramLog(ID);
+	}
+
+	//Delete the shaders as they're linked into the program now and are no longer necessary
+	glDeleteShader(vertex);
+	glDeleteShader(geometry);
 	glDeleteShader(fragment);
 }
 
@@ -230,4 +201,57 @@ void Shader::printProgramLog(GLuint program)
 	{
 		KJK_ERROR("Name {0} is not a program", program);
 	}
+}
+
+GLuint Shader::loadAndCompileShader(const GLchar* shaderPath, GLenum type)
+{
+	//Declare variables for reading the shader file
+	std::string code;
+	std::ifstream shaderFile;
+	//Ensure ifstream object can throw exceptions
+	shaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	try
+	{
+		//Open the shader file
+		shaderFile.open(shaderPath);
+
+		//Declare a string stream to hold shader code
+		std::stringstream gShaderStream;
+
+		//Read file's buffer contents into streams
+		gShaderStream << shaderFile.rdbuf();
+
+		//Close the file handler
+		shaderFile.close();
+
+		//Convert the stream into a string
+		code = gShaderStream.str();
+	}
+	catch (std::ifstream::failure& e)
+	{
+		KJK_ERROR("ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ: {0}", e.what());
+	}
+
+	//Convert the string to a GLchar pointer
+	const GLchar* shaderCode = code.c_str();
+
+	//Declare the shader ID variable
+	GLuint shader{ 0 };
+
+	//Create and compile a geometry shader
+	shader = glCreateShader(type);
+	glShaderSource(shader, 1, &shaderCode, NULL);
+	glCompileShader(shader);
+
+	//Check for geometry shader compile errors
+	GLint shaderCompiled = GL_FALSE;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &shaderCompiled);
+	if (shaderCompiled != GL_TRUE)
+	{
+		KJK_ERROR("Unable to compile the shader {0}!", shader);
+		PrintShaderLog(shader);
+	}
+
+	//Return the shader Id
+	return shader;
 }

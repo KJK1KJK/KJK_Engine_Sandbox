@@ -9,6 +9,9 @@ public:
 	//Constructor reads and builds the shader
 	Shader(const GLchar* vertexPath, const GLchar* fragmentPath);
 
+	//Constructor for 3 shader stages (vertex, geometry, fragment)
+	Shader(const GLchar* vertexPath, const GLchar* geometryPath, const GLchar* fragmentPath);
+
 	~Shader();
 
 	//Disable copy semantics
@@ -40,5 +43,8 @@ private:
 	void PrintShaderLog(GLuint shader);
 	//Prints out the program log for a program object
 	void printProgramLog(GLuint program);
+
+	//Load and compile a shader from file
+	GLuint loadAndCompileShader(const GLchar* shaderPath, GLenum type);
 };
 

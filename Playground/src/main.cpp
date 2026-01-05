@@ -43,7 +43,7 @@ GLuint gScreenQuadVAO{ 0 };
 GLuint gScreenQuadVBO{ 0 };
 
 //Shader program IDs
-std::optional<std::array<Shader, 8>> gShaders;
+std::optional<std::array<Shader, 10>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
@@ -144,6 +144,9 @@ int main(int argc, char* args[])
 			//Postprocessing effect settings
 			bool applyPostProcessing = false;
 
+			//Show normal vectors setting
+			bool showNormals = false;
+
 			//Initialize time value
 			float timeValue = 0.0f;
 
@@ -235,6 +238,9 @@ int main(int argc, char* args[])
 							break;
 						case SDLK_T: //Toggle postprocessing effect
 							applyPostProcessing = !applyPostProcessing;
+							break;
+						case SDLK_N: //Toggle normal vector display
+							showNormals = !showNormals;
 							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
@@ -356,6 +362,15 @@ int main(int argc, char* args[])
 				//Disable writing to the stencil buffer
 				glStencilMask(0x00);
 
+				//Disable face culling
+				glDisable(GL_CULL_FACE);
+
+				//Change the shader to use the explosion geometry effect
+				changeShader(8);
+
+				//Set the time uniform
+				(*gShaders)[gCurrentShaderIndex].SetFloat("time", glm::radians(-90.0f));
+
 				//Set the model matrix for the detailed model
 				glm::mat4 model = glm::mat4(1.0f);
 				//Move the model back a bit
@@ -366,6 +381,20 @@ int main(int argc, char* args[])
 				(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
 				//Render the detailed model
 				gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+
+				if(showNormals)
+				{
+					//Change the shader to show normal vectors
+					changeShader(9);
+
+					//Set the model matrix uniform
+					(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+					//Render the detailed model
+					gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+				}
+
+				//Re-enable face culling
+				glEnable(GL_CULL_FACE);
 
 				//Change the shader for the reflective cube
 				changeShader(6);
@@ -710,7 +739,7 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 8>
+	gShaders.emplace(std::array<Shader, 10>
 	{
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
@@ -719,7 +748,9 @@ bool loadMedia()
 		Shader("assets/shaders/shader.vert", "assets/shaders/BorderShader.frag"),
 		Shader("assets/shaders/Cubemap.vert", "assets/shaders/Cubemap.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/ReflectiveShader.frag"),
-		Shader("assets/shaders/shader.vert", "assets/shaders/RefractiveShader.frag")
+		Shader("assets/shaders/shader.vert", "assets/shaders/RefractiveShader.frag"),
+		Shader("assets/shaders/shaderExplode.vert", "assets/shaders/explode.geom", "assets/shaders/shader2.frag"),
+		Shader("assets/shaders/NormalVectorShader.vert", "assets/shaders/NormalVectorShader.geom", "assets/shaders/NormalVectorShader.frag")
 	});
 
 	//Load two cube models
@@ -811,39 +842,43 @@ bool loadMedia()
 	//Load the detailed model
 	gModel = new Model("assets/backpack/backpack.obj");
 
-	//Use the first shader program
-	changeShader(1);
+	//Iterate over the 1st and 8th shader programs
+	for (GLint i : {1, 8})
+	{
+		//Use a shader program
+		changeShader(i);
 
-	//Set color uniforms for the spotlight
-	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
-	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
-	(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
-	//Set spotlight cutoff angles
-	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
-	//Set spotlight attenuation factors
-	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.constant", 1.0f);
-	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.linear", 0.045f);
-	(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.0075f);
+		//Set color uniforms for the spotlight
+		(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+		(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+		(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
+		//Set spotlight cutoff angles
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
+		//Set spotlight attenuation factors
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.constant", 1.0f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.linear", 0.045f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.0075f);
 
-	//Set color uniforms for the directional light
-	(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
-	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
-	(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.specular", gDirectionalLight.specular);
+		//Set color uniforms for the directional light
+		(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
+		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
+		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.specular", gDirectionalLight.specular);
 
-	//Set color uniforms for the point light
-	(*gShaders)[gCurrentShaderIndex].SetVec3("pointLights[0].position", gPointLights[0].position);
-	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].ambient", gPointLights[0].ambient);
-	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].diffuse", gPointLights[0].diffuse);
-	(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].specular", gPointLights[0].specular);
-	//Set point light attenuation factors
-	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].constant", 1.0f);
-	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.09f);
-	(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.032f);
+		//Set color uniforms for the point light
+		(*gShaders)[gCurrentShaderIndex].SetVec3("pointLights[0].position", gPointLights[0].position);
+		(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].ambient", gPointLights[0].ambient);
+		(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].diffuse", gPointLights[0].diffuse);
+		(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].specular", gPointLights[0].specular);
+		//Set point light attenuation factors
+		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].constant", 1.0f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.09f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.032f);
 
-	//Set material shininess
-	(*gShaders)[gCurrentShaderIndex].SetFloat("material.shininess", 32.0f);
+		//Set material shininess
+		(*gShaders)[gCurrentShaderIndex].SetFloat("material.shininess", 32.0f);
+	}
 
 	//Change to the framebuffer shader and set the texture uniform
 	changeShader(0);

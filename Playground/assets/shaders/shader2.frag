@@ -14,6 +14,9 @@ struct Material
 };
 uniform Material material;
 
+uniform sampler2D texture_diffuse1;
+uniform sampler2D texture_specular1;
+
 struct DirLight
 {
 	vec3 direction;
@@ -60,6 +63,9 @@ struct SpotLight
 in SpotLight spotLightView;
 vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
+vec4 sampleDiffuse();
+vec4 sampleSpecular();
+
 void main()
 {
 	//Calculate the normal and view direction
@@ -95,10 +101,14 @@ vec4 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
 
+	//Sample the texture maps uniforms to see which one has been set
+	vec4 diffuseTex = sampleDiffuse();
+	vec4 specularTex = sampleSpecular();
+
 	//Combine results
-	vec4 ambient = light.ambient * texture(material.diffuse, texCoords);
-	vec4 diffuse = light.diffuse * diff * texture(material.diffuse, texCoords);
-	vec4 specular = light.specular * spec * texture(material.specular, texCoords);
+	vec4 ambient = light.ambient * diffuseTex;
+	vec4 diffuse = light.diffuse * diff * diffuseTex;
+	vec4 specular = light.specular * spec * specularTex;
 
 	//Return final result
 	return (ambient + diffuse + specular);
@@ -117,10 +127,14 @@ vec4 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
 
+	//Sample the texture maps uniforms to see which one has been set
+	vec4 diffuseTex = sampleDiffuse();
+	vec4 specularTex = sampleSpecular();
+
 	//Combine results
-	vec4 ambient = light.ambient * texture(material.diffuse, texCoords);
-	vec4 diffuse = light.diffuse * diff * texture(material.diffuse, texCoords);
-	vec4 specular = light.specular * spec * texture(material.specular, texCoords);
+	vec4 ambient = light.ambient * diffuseTex;
+	vec4 diffuse = light.diffuse * diff * diffuseTex;
+	vec4 specular = light.specular * spec * specularTex;
 
 	//Calculate attenuation
 	float distance = length(light.position - fragPos);
@@ -148,10 +162,14 @@ vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
 
+	//Sample the texture maps uniforms to see which one has been set
+	vec4 diffuseTex = sampleDiffuse();
+	vec4 specularTex = sampleSpecular();
+
 	//Combine results
-	vec4 ambient = light.ambient * texture(material.diffuse, texCoords);
-	vec4 diffuse = light.diffuse * diff * texture(material.diffuse, texCoords);
-	vec4 specular = light.specular * spec * texture(material.specular, texCoords);
+	vec4 ambient = light.ambient * diffuseTex;
+	vec4 diffuse = light.diffuse * diff * diffuseTex;
+	vec4 specular = light.specular * spec * specularTex;
 
 	//Calculate attenuation
 	float distance = length(light.position - fragPos);
@@ -173,4 +191,22 @@ vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 
 	//Return final result
 	return (ambient + diffuse + specular);
+}
+
+vec4 sampleDiffuse()
+{
+	vec4 m = texture(material.diffuse, texCoords);
+	vec4 t = texture(texture_diffuse1, texCoords);
+
+	float mLum = dot(m.rgb, vec3(0.2126, 0.7152, 0.0722));
+	return (mLum > 0.001) ? m : t;
+}
+
+vec4 sampleSpecular()
+{
+	vec4 m = texture(material.specular, texCoords);
+	vec4 t = texture(texture_specular1, texCoords);
+
+	float mLum = dot(m.rgb, vec3(0.2126, 0.7152, 0.0722));
+	return (mLum > 0.001) ? m : t;
 }
