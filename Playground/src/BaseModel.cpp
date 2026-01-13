@@ -212,7 +212,7 @@ GLuint BaseModel::textureFromFile(const char* path)
 		else
 		{
 			//Generate the texture using the loaded surface data
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, formattedSurface->w, formattedSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, formattedSurface->pixels);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB_ALPHA, formattedSurface->w, formattedSurface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, formattedSurface->pixels);
 
 			//Get the texture wrap mode from the alpha channel presence
 			GLenum wrapMode = hasAlpha ? GL_CLAMP_TO_EDGE : GL_REPEAT;

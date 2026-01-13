@@ -63,8 +63,12 @@ struct SpotLight
 in SpotLight spotLightView;
 vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
+in vec4 fragPosLightSpace;
+uniform sampler2D shadowMap;
+
 vec4 sampleDiffuse();
 vec4 sampleSpecular();
+float shadowCalculations(vec4 posLightSpace);
 
 void main()
 {
@@ -98,8 +102,8 @@ vec4 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)
 	float diff = max(dot(normal, lightDir), 0.0);
 
 	//Specular light calculations
-	vec3 reflectDir = reflect(-lightDir, normal);
-	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+	vec3 halfwayDir = normalize(lightDir + viewDir);
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
 
 	//Sample the texture maps uniforms to see which one has been set
 	vec4 diffuseTex = sampleDiffuse();
@@ -109,6 +113,11 @@ vec4 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)
 	vec4 ambient = light.ambient * diffuseTex;
 	vec4 diffuse = light.diffuse * diff * diffuseTex;
 	vec4 specular = light.specular * spec * specularTex;
+
+	//Apply shadow
+	float shadow = shadowCalculations(fragPosLightSpace);
+	diffuse *= (1.0 - shadow);
+	specular *= (1.0 - shadow);
 
 	//Return final result
 	return (ambient + diffuse + specular);
@@ -124,8 +133,8 @@ vec4 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 	float diff = max(dot(normal, lightDir), 0.0);
 
 	//Specular light calculations
-	vec3 reflectDir = reflect(-lightDir, normal);
-	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+	vec3 halfwayDir = normalize(lightDir + viewDir);
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
 
 	//Sample the texture maps uniforms to see which one has been set
 	vec4 diffuseTex = sampleDiffuse();
@@ -159,8 +168,8 @@ vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 	float diff = max(dot(normal, lightDir), 0.0);
 
 	//Specular light calculations
-	vec3 reflectDir = reflect(-lightDir, normal);
-	float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+	vec3 halfwayDir = normalize(lightDir + viewDir);
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
 
 	//Sample the texture maps uniforms to see which one has been set
 	vec4 diffuseTex = sampleDiffuse();
@@ -209,4 +218,37 @@ vec4 sampleSpecular()
 
 	float mLum = dot(m.rgb, vec3(0.2126, 0.7152, 0.0722));
 	return (mLum > 0.001) ? m : t;
+}
+
+float shadowCalculations(vec4 posLightSpace)
+{
+	//Perform perspective divide
+	vec3 projCoords = posLightSpace.xyz / posLightSpace.w;
+	//Transform the NDC coordinates to [0,1] range
+	projCoords = projCoords * 0.5 + 0.5;
+
+	//Check if the fragment is outside the light's frustum
+	if(projCoords.z > 1.0)
+		return 0.0;
+
+	//Get the closest point on the depth map
+	float closestDepth = texture(shadowMap, projCoords.xy).r;
+	//Get the current depth from the lights perspective
+	float currentDepth = projCoords.z;
+	
+	//Apply percentage-close filtering
+	float shadow = 0.0;
+	vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+	float bias = max(0.00005 * (1.0 - dot(normalize(normal), normalize(-dirLightView.direction))), 0.000005);
+	for(int x = -1; x <= 1; ++x)
+	{
+		for(int y = -1; y <= 1; ++y)
+		{
+			float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+			shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+		}
+	}
+
+	//Return the shadow
+	return shadow / 9.0;
 }

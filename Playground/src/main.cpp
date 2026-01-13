@@ -21,11 +21,13 @@ bool loadMedia();
 void close();
 //Change the shader program
 void changeShader(GLint shaderIndex);
+//Recreate framebuffer objects on window resize
+void recreateFramebuffers();
 
 //Render example scene
-void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection);
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, bool isShadow = false);
 //Render space scene
-void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection);
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, bool isShadow = false);
 
 //Global variables
 int SCREEN_WIDTH{ 800 };
@@ -47,8 +49,24 @@ GLuint gRBO{ 0 };
 GLuint gScreenQuadVAO{ 0 };
 GLuint gScreenQuadVBO{ 0 };
 
+//Multisample framebuffer object ID
+GLuint gMultisampleFBO{ 0 };
+//Multisample texture that serves as the framebuffer color attachment
+GLuint gMultisampleFBOTexture{ 0 };
+//Multisample renderbuffer object for depth and stencil attachments
+GLuint gMultisampleRBO{ 0 };
+
+//Shadow map frmamebuffer object ID
+GLuint gShadowMapFBO{ 0 };
+//Shadow map texture ID
+GLuint gShadowMapTexture{ 0 };
+//Shadow map dimensions
+const GLuint SHADOW_WIDTH{ 4096 };
+const GLuint SHADOW_HEIGHT{ 4096 };
+glm::mat4 gLightSpaceMatrix;
+
 //Shader program IDs
-std::optional<std::array<Shader, 11>> gShaders;
+std::optional<std::array<Shader, 16>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
@@ -163,6 +181,9 @@ int main(int argc, char* args[])
 			//Show normal vectors setting
 			bool showNormals = false;
 
+			//SHow depth map setting
+			bool showDepthMap = false;
+
 			//Current selected scene setting
 			int currentScene = 0;
 
@@ -206,6 +227,9 @@ int main(int argc, char* args[])
 						//Adjust the screen width and height variables
 						SCREEN_WIDTH = e.window.data1;
 						SCREEN_HEIGHT = e.window.data2;
+
+						//Recreate framebuffer objects
+						recreateFramebuffers();
 					}
 					//Handle keyboard input
 					else if (e.type == SDL_EVENT_KEY_DOWN)
@@ -234,18 +258,21 @@ int main(int argc, char* args[])
 						case SDLK_F: //Toggle flashlight
 							flashlightEnabled = !flashlightEnabled;
 
-							changeShader(1);
-							if(flashlightEnabled)
+							for (int i : {1, 8, 10})
 							{
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", gSpotLight.ambient);
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", gSpotLight.diffuse);
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", gSpotLight.specular);
-							}
-							else
-							{
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
-								(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
+								changeShader(i);
+								if (flashlightEnabled)
+								{
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", gSpotLight.ambient);
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", gSpotLight.diffuse);
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", gSpotLight.specular);
+								}
+								else
+								{
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.ambient", glm::vec4(0.0f));
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.diffuse", glm::vec4(0.0f));
+									(*gShaders)[gCurrentShaderIndex].SetVec4("spotLight.specular", glm::vec4(0.0f));
+								}
 							}
 							break;
 						case SDLK_O: //Toggle outline effect
@@ -264,6 +291,9 @@ int main(int argc, char* args[])
 							break;
 						case SDLK_N: //Toggle normal vector display
 							showNormals = !showNormals;
+							break;
+						case SDLK_0:
+							showDepthMap = !showDepthMap;
 							break;
 						case SDLK_UP: //Increase the appropriate value
 							switch (inputState)
@@ -335,8 +365,78 @@ int main(int argc, char* args[])
 				//Handle camera keystate input
 				gCamera->HandleInput(SDL_Event{}, deltaTime, mouseCaptured, keyState);
 
-				//Use the created franebuffer
-				glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+				//Resize the viewport to the shadow map size
+				glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+				//Bind the shadow map framebuffer
+				glBindFramebuffer(GL_FRAMEBUFFER, gShadowMapFBO);
+
+				//Enable depth testing
+				glEnable(GL_DEPTH_TEST);
+				glDepthFunc(GL_LESS);
+				glDepthMask(GL_TRUE);
+
+				//Clear the depth buffer
+				glClear(GL_DEPTH_BUFFER_BIT);
+
+				//Declare the vawribale for orthogonal sizing
+				float orthogonalSize = 0;
+				//Render the scene to the shadow map
+				switch (currentScene)
+				{
+				case 0:
+					orthogonalSize = 80.0f;
+					break;
+				case 1:
+					orthogonalSize = 10.0f;
+					break;
+				default:
+					orthogonalSize = 80.0f;
+					break;
+				}
+
+				//Define directional light projection matrix
+				glm::mat4 lightProjection = glm::ortho(-orthogonalSize, orthogonalSize, -orthogonalSize, orthogonalSize, 0.1f, 200.0f);
+				//Define directional light view matrix
+				glm::mat4 lightView = glm::lookAt(gDirectionalLight.position, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+				//Change to a simple depth shader
+				changeShader(11);
+
+				//Set the light space matrix uniform
+				gLightSpaceMatrix = lightProjection * lightView;
+				(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+				//Update the view and projection matrices in the UBO
+				glBindBuffer(GL_UNIFORM_BUFFER, gMatricesUBO);
+				glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(lightProjection));
+				glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(lightView));
+				glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+				//Render the scene to the shadow map
+				switch (currentScene)
+				{
+				case 0:
+					renderSpaceScene(timeValue, lightView, lightProjection, true);
+					break;
+				case 1:
+					//Enable front face culling to reduce shadow acne
+					glEnable(GL_CULL_FACE);
+					glCullFace(GL_FRONT);
+
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, true);
+					break;
+				default:
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, true);
+					break;
+				}
+
+				//Enable back face culling
+				glCullFace(GL_BACK);
+
+				//Change the viewport to the screen size
+				glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+				//Use the created framebuffer
+				glBindFramebuffer(GL_FRAMEBUFFER, gMultisampleFBO);
 
 				//Set the clear color
 				glClearColor(0.05f, 0.0f, 0.05f, 1.0f);
@@ -382,13 +482,24 @@ int main(int argc, char* args[])
 					break;
 				}
 
-				//Unbind the framebuffer to render to the screen
+				//Blit the multisample framebuffer to the normal framebuffer
+				glBindFramebuffer(GL_READ_FRAMEBUFFER, gMultisampleFBO);
+				glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gFBO);
+				glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+				//Bind the default framebuffer to render to the screen
 				glBindFramebuffer(GL_FRAMEBUFFER, 0);
 				//Clear the screen
 				glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 				glClear(GL_COLOR_BUFFER_BIT);
 
-				if (applyPostProcessing)
+				//Choose the shader for rendering the screen quad
+				if(showDepthMap)
+				{
+					//Use the depth map shader
+					changeShader(12);
+				}
+				else if (applyPostProcessing)
 				{
 					//Use the post processing shader
 					changeShader(0);
@@ -405,9 +516,18 @@ int main(int argc, char* args[])
 				//Disable depth testing
 				glDisable(GL_DEPTH_TEST);
 
-				//Bind the framebuffer texture
+				//Bind the appropriate texture for the screen quad
 				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, gFBOTexture);
+				if(showDepthMap)
+				{
+					//Bind the shadow map texture
+					glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+				}
+				else
+				{
+					//Bind the framebuffer texture
+					glBindTexture(GL_TEXTURE_2D, gFBOTexture);
+				}
 
 				//Draw the screen quad
 				glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -456,6 +576,7 @@ bool init()
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 4);
 
 		//Create a window
 		gWindow = SDL_CreateWindow("LearnOpenGL", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
@@ -534,6 +655,9 @@ bool initGL()
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
+	//Enable multisampling
+	glEnable(GL_MULTISAMPLE);
+
 	//Generate a framebuffer object
 	glGenFramebuffers(1, &gFBO);
 	//Bind the framebuffer object
@@ -563,11 +687,74 @@ bool initGL()
 	GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 	if(framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
 	{
-		KJK_ERROR("Framebuffer is not complete: {0}!", framebufferStatus);
+		KJK_ERROR("Post-processing framebuffer is not complete: {0}!", framebufferStatus);
 		success = false;
 	}
 
-	//Unbind the framebuffer
+	//Generate a multisample framebuffer object
+	glGenFramebuffers(1, &gMultisampleFBO);
+	//Bind the multisample framebuffer object
+	glBindFramebuffer(GL_FRAMEBUFFER, gMultisampleFBO);
+
+	//Create a multisample texture to serve as the framebuffer color attachment
+	glGenTextures(1, &gMultisampleFBOTexture);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, gMultisampleFBOTexture);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, GL_TRUE);
+	glTexParameterf(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	//Unbind the multisample texture
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+	//Attach the texture to the multisample framebuffer
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, gMultisampleFBOTexture, 0);
+
+	//Create a multisample renderbuffer object for depth and stencil attachments
+	glGenRenderbuffers(1, &gMultisampleRBO);
+	glBindRenderbuffer(GL_RENDERBUFFER, gMultisampleRBO);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+	//Unbind the multisample renderbuffer
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	//Attach the renderbuffer to the multisample framebuffer
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gMultisampleRBO);
+
+	//Check if the multisample framebuffer's status is complete
+	framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+	{
+		KJK_ERROR("Multisample framebuffer is not complete: {0}!", framebufferStatus);
+		success = false;
+	}
+
+	//Generate the shadow map framebuffer
+	glGenFramebuffers(1, &gShadowMapFBO);
+	//Bind the shadow map framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, gShadowMapFBO);
+
+	//Create the shadow map texture
+	glGenTextures(1, &gShadowMapTexture);
+	glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+	//Attach the texture to the shadow map framebuffer
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gShadowMapTexture, 0);
+	//Disable color buffer writes
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	//Check if the shadow map framebuffer is complete
+	framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+	{
+		KJK_ERROR("Shadow map framebuffer is not complete: {0}!", framebufferStatus);
+		success = false;
+	}
+
+	//Unbind the shadow map framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	//Generate the UBO for matrices
@@ -600,7 +787,7 @@ bool initGL()
 	glBindVertexArray(0);
 
 	//Define the directional light properties
-	gDirectionalLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
+	gDirectionalLight.position = glm::vec3(-20.0f, 40.0f, -10.0f);
 	gDirectionalLight.ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
 	gDirectionalLight.diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
 	gDirectionalLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -629,7 +816,7 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 11>
+	gShaders.emplace(std::array<Shader, 16>
 	{
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
@@ -641,7 +828,12 @@ bool loadMedia()
 		Shader("assets/shaders/shader.vert", "assets/shaders/RefractiveShader.frag"),
 		Shader("assets/shaders/shaderExplode.vert", "assets/shaders/explode.geom", "assets/shaders/shader2.frag"),
 		Shader("assets/shaders/NormalVectorShader.vert", "assets/shaders/NormalVectorShader.geom", "assets/shaders/NormalVectorShader.frag"),
-		Shader("assets/shaders/InstanceShader.vert", "assets/shaders/InstanceShader.frag")
+		Shader("assets/shaders/InstanceShader.vert", "assets/shaders/InstanceShader.frag"),
+		Shader("assets/shaders/simpleDepthShader.vert", "assets/shaders/simpleDepthShader.frag"),
+		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/DepthMapShader.frag"),
+		Shader("assets/shaders/instancedDepthShader.vert", "assets/shaders/instancedDepthShader.frag"),
+		Shader("assets/shaders/simpleDepthShader.vert", "assets/shaders/transparentDepthShader.frag"),
+		Shader("assets/shaders/explodingDepthShader.vert", "assets/shaders/explodingDepthShader.geom", "assets/shaders/simpleDepthShader.frag")
 	});
 
 	//Load two cube models
@@ -713,7 +905,7 @@ bool loadMedia()
 		}
 	);
 	//Set the position of the reflective cube model
-	gReflectiveCubeModel->setPosition(glm::vec3(0.0f, 5.0f, -2.0f));
+	gReflectiveCubeModel->setPosition(glm::vec3(-0.5f, 5.0f, -2.0f));
 
 	//Load the refractive cube model
 	gRefractiveCubeModel = new CubeModel(nullptr, nullptr, false,
@@ -834,8 +1026,8 @@ bool loadMedia()
 		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(20.0f)));
 		//Set spotlight attenuation factors
 		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.constant", 1.0f);
-		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.linear", 0.045f);
-		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.0075f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.linear", 0.07f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.017f);
 
 		//Set color uniforms for the directional light
 		(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
@@ -850,8 +1042,8 @@ bool loadMedia()
 		(*gShaders)[gCurrentShaderIndex].SetVec4("pointLights[0].specular", gPointLights[0].specular);
 		//Set point light attenuation factors
 		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].constant", 1.0f);
-		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.09f);
-		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.032f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.14f);
+		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.07f);
 
 		//Set material shininess
 		(*gShaders)[gCurrentShaderIndex].SetFloat("material.shininess", 32.0f);
@@ -860,6 +1052,10 @@ bool loadMedia()
 	//Change to the framebuffer shader and set the texture uniform
 	changeShader(0);
 	(*gShaders)[gCurrentShaderIndex].SetInt("screenTexture", 0);
+
+	//Change to the depth map shader and set the depth map texture uniform
+	changeShader(12);
+	(*gShaders)[gCurrentShaderIndex].SetInt("depthMap", 0);
 
 	KJK_INFO("Loaded media!");
 
@@ -902,14 +1098,17 @@ void close()
 	glDeleteVertexArrays(1, &gScreenQuadVAO);
 	glDeleteBuffers(1, &gScreenQuadVBO);
 
-	//Delete the renderbuffer object
+	//Delete the renderbuffer objects
 	glDeleteRenderbuffers(1, &gRBO);
+	glDeleteRenderbuffers(1, &gMultisampleRBO);
 
-	//Delete the texture used for the framebuffer
+	//Delete the textures used for the framebuffers
 	glDeleteTextures(1, &gFBOTexture);
+	glDeleteTextures(1, &gMultisampleFBOTexture);
 
-	//Delete the framebuffer object
+	//Delete the framebuffer objects
 	glDeleteFramebuffers(1, &gFBO);
+	glDeleteFramebuffers(1, &gMultisampleFBO);
 
 	//Delete the asteroid instance VBO
 	glDeleteBuffers(1, &gAsteroidInstanceVBO);
@@ -937,25 +1136,65 @@ void changeShader(GLint index)
 	}
 }
 
-//Render an example scene that showcases many OpenGL techniques.
-void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection)
+void recreateFramebuffers()
 {
-	//Enable the shader for the model
-	changeShader(1);
+	//Recreate the framebuffer texture
+	glBindTexture(GL_TEXTURE_2D, gFBOTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
 
-	//Update the spotlight position and direction uniforms
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+	//Recreate the renderbuffer storage
+	glBindRenderbuffer(GL_RENDERBUFFER, gRBO);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-	//Disable writing to the stencil buffer
-	glStencilMask(0x00);
+	//Recreate the multisample framebuffer texture
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, gMultisampleFBOTexture);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, GL_TRUE);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+
+	//Recreate the multisample renderbuffer storage
+	glBindRenderbuffer(GL_RENDERBUFFER, gMultisampleRBO);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	//Unbind any framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+//Render an example scene that showcases many OpenGL techniques.
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, bool isShadow)
+{
+	if(!isShadow)
+	{
+		//Enable the shader for the model
+		changeShader(1);
+		
+		//Bind the shadow map texture
+		glActiveTexture(GL_TEXTURE25);
+		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+		//Load the shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
+		//Load the light space natrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Update the spotlight position and direction uniforms
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+
+		//Disable writing to the stencil buffer
+		glStencilMask(0x00);
+	}
 
 	//Render the plane
 	gPlaneModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	//Setup the stencil buffer operations for writing
-	glStencilFunc(GL_ALWAYS, 1, 0xFF);
-	glStencilMask(0xFF);
+	if (!isShadow)
+	{
+		//Setup the stencil buffer operations for writing
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilMask(0xFF);
+	}
 
 	//Render the cubes
 	for (int i = 0; i < 2; ++i)
@@ -963,17 +1202,40 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 		gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
 	}
 
-	//Disable writing to the stencil buffer
-	glStencilMask(0x00);
-
 	//Disable face culling
 	glDisable(GL_CULL_FACE);
 
-	//Change the shader to use the explosion geometry effect
-	changeShader(8);
+	if (!isShadow)
+	{
+		//Disable writing to the stencil buffer
+		glStencilMask(0x00);
+
+		//Change the shader to use the explosion geometry effect
+		changeShader(8);
+
+		//Bind the shadow map texture
+		glActiveTexture(GL_TEXTURE25);
+		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+		//Load the shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
+		//Load the light space natrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Update the spotlight position and direction uniforms
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+	}
+	else
+	{
+		//Switch to the instanced depth shader
+		changeShader(15);
+
+		//Set the light space matrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
 
 	//Set the time uniform
-	(*gShaders)[gCurrentShaderIndex].SetFloat("time", glm::radians(timeValue / 3.0f));
+	(*gShaders)[gCurrentShaderIndex].SetFloat("time", timeValue / 4.0f);
 
 	//Set the model matrix for the detailed model
 	glm::mat4 model = glm::mat4(1.0f);
@@ -986,55 +1248,78 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Render the detailed model
 	gModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	if (showNormals)
+	if (!isShadow)
 	{
-		//Change the shader to show normal vectors
-		changeShader(9);
+		if (showNormals)
+		{
+			//Change the shader to show normal vectors
+			changeShader(9);
 
-		//Set the model matrix uniform
-		(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
-		//Render the detailed model
-		gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+			//Set the model matrix uniform
+			(*gShaders)[gCurrentShaderIndex].SetMat4("model", model);
+			//Render the detailed model
+			gModel->Draw((*gShaders)[gCurrentShaderIndex]);
+		}
+
+		//Change the shader for the reflective cube
+		changeShader(6);
+	}
+	else
+	{
+		//Switch to the simple depth shader
+		changeShader(11);
 	}
 
 	//Re-enable face culling
 	glEnable(GL_CULL_FACE);
 
-	//Change the shader for the reflective cube
-	changeShader(6);
-
 	//Render the reflective cube
 	gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	//Change the shader for the refractive cube
-	changeShader(7);
+	if (!isShadow)
+	{
+		//Change the shader for the refractive cube
+		changeShader(7);
+	}
 
 	//Render the refractive cube
 	gRefractiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	//Change the depth function to allow skybox depth values to pass
-	glDepthFunc(GL_LEQUAL);
 	//Disable face culling
 	glDisable(GL_CULL_FACE);
-	//Disbale writng to the depth buffer
-	glDepthMask(GL_FALSE);
 
-	//Use the skybox shader
-	changeShader(5);
+	if (!isShadow)
+	{
+		//Change the depth function to allow skybox depth values to pass
+		glDepthFunc(GL_LEQUAL);
+		//Disbale writng to the depth buffer
+		glDepthMask(GL_FALSE);
 
-	//Set the view and projection matrices for the skybox
-	glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); //Remove translation from the view matrix
-	(*gShaders)[gCurrentShaderIndex].SetMat4("view", skyboxView);
-	(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
+		//Use the skybox shader
+		changeShader(5);
 
-	//Render the skybox cube
-	gSkyboxCube->Draw((*gShaders)[gCurrentShaderIndex]);
+		//Set the view and projection matrices for the skybox
+		glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); //Remove translation from the view matrix
+		(*gShaders)[gCurrentShaderIndex].SetMat4("view", skyboxView);
+		(*gShaders)[gCurrentShaderIndex].SetMat4("projection", projection);
 
-	//Reset the depth function
-	glDepthFunc(GL_LESS);
+		//Render the skybox cube
+		gSkyboxCube->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	//Use the main shader
-	changeShader(1);
+		//Reset the depth function
+		glDepthFunc(GL_LESS);
+
+		//Use the main shader
+		changeShader(1);
+	}
+	else
+	{
+		//Switch to the instanced depth shader
+		changeShader(14);
+
+		//Set the light space matrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
 
 	//Create a sorted map of the glass planes based on distance from the camera
 	std::map<float, PlaneModel*> sorted;
@@ -1052,63 +1337,78 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 
 	//Re-enable face culling
 	glEnable(GL_CULL_FACE);
-	//Re-enable writing to the depth buffer
-	glDepthMask(GL_TRUE);
 
-	//Draw an outline effect around the cubes
-	if (outlineEffectEnabled)
+	if (!isShadow)
 	{
-		//Setup the stencil buffer operations for the outline effect
-		glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-		//Disable writing to the stencil buffer
-		glStencilMask(0x00);
+		//Re-enable writing to the depth buffer
+		glDepthMask(GL_TRUE);
 
-		//Disable the depth buffer operations
-		glDisable(GL_DEPTH_TEST);
-
-		//Use the border shader
-		changeShader(4);
-
-		//Render the scaled up cubes for the outline effect
-		for (int i = 0; i < 2; ++i)
+		//Draw an outline effect around the cubes
+		if (outlineEffectEnabled)
 		{
-			//Save the original scale
-			glm::vec3 originalScale = gCubeModels[i].getScale();
+			//Setup the stencil buffer operations for the outline effect
+			glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+			//Disable writing to the stencil buffer
+			glStencilMask(0x00);
 
-			//Set the new scale
-			gCubeModels[i].setScale(originalScale * 1.1f);
+			//Disable the depth buffer operations
+			glDisable(GL_DEPTH_TEST);
 
-			//Draw the cube
-			gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
+			//Use the border shader
+			changeShader(4);
 
-			//Restore the original scale
-			gCubeModels[i].setScale(originalScale);
+			//Render the scaled up cubes for the outline effect
+			for (int i = 0; i < 2; ++i)
+			{
+				//Save the original scale
+				glm::vec3 originalScale = gCubeModels[i].getScale();
+
+				//Set the new scale
+				gCubeModels[i].setScale(originalScale * 1.1f);
+
+				//Draw the cube
+				gCubeModels[i].Draw((*gShaders)[gCurrentShaderIndex]);
+
+				//Restore the original scale
+				gCubeModels[i].setScale(originalScale);
+			}
+
+			//Re-enable depth buffer writing
+			glEnable(GL_DEPTH_TEST);
+
+			//Reset the stencil buffer settings
+			glStencilMask(0xFF);
+			glStencilFunc(GL_ALWAYS, 1, 0xFF);
+
+			//Change the shader back to the main shader
+			changeShader(1);
 		}
-
-		//Re-enable depth buffer writing
-		glEnable(GL_DEPTH_TEST);
-
-		//Reset the stencil buffer settings
-		glStencilMask(0xFF);
-		glStencilFunc(GL_ALWAYS, 1, 0xFF);
-
-		//Change the shader back to the main shader
-		changeShader(1);
 	}
 }
 
-void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection)
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, bool isShadow)
 {
-	//Enable the default shader
-	changeShader(1);
+	if (!isShadow)
+	{
+		//Enable the default shader
+		changeShader(1);
 
-	//Ensure the stencil buffer is configured to always pass
-	glStencilFunc(GL_ALWAYS, 1, 0xFF);
-	glStencilMask(0xFF);
+		//Ensure the stencil buffer is configured to always pass
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilMask(0xFF);
 
-	//Update the spotlight position and direction uniforms
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+		//Bind the shadow map texture
+		glActiveTexture(GL_TEXTURE25);
+		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+		//Load the shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
+		//Load the light space natrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Update the spotlight position and direction uniforms
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+	}
 
 	//Declare the model matrix for the planet
 	glm::mat4 model = glm::mat4(1.0f);
@@ -1122,13 +1422,31 @@ void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection)
 	//Render the planet model
 	gPlanetModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	//Switch to the instance shader
-	changeShader(10);
+	if (!isShadow)
+	{
+		//Switch to the instance shader
+		changeShader(10);
 
-	//Update the spotlight position and direction uniforms for instance shader
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
-	(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
+		//Update the spotlight position and direction uniforms for instance shader
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
+		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
 
+		//Bind the shadow map texture
+		glActiveTexture(GL_TEXTURE25);
+		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
+		//Load the shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
+		//Load the light space natrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
+	else
+	{
+		//Switch to the instanced depth shader
+		changeShader(13);
+
+		//Set the light space matrix uniform
+		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
 
 	//Draw the asteroids using instanced rendering
 	for(GLuint i = 0; i < gAsteroidModel->GetMeshes().size(); i++)

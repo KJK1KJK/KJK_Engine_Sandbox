@@ -72,6 +72,9 @@ uniform float time;
 vec4 explode(vec3 position, vec3 normal);
 vec3 getNormal();
 
+uniform mat4 lightSpaceMatrix;
+out vec4 fragPosLightSpace;
+
 void main()
 {
 	vec3 faceNormal = getNormal();
@@ -89,6 +92,7 @@ void main()
 
 		vec4 explodedPos = explode(vsFragPos[i], faceNormal);
 		fragPos = explodedPos.xyz;
+		fragPosLightSpace = lightSpaceMatrix * explodedPos;
 		gl_Position = projection * explodedPos;
 		texCoords = gs_in[i].texCoords;
 		EmitVertex();

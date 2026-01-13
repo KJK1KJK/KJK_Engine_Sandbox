@@ -64,6 +64,9 @@ struct SpotLight
 uniform SpotLight spotLight;
 out SpotLight vsSpotLightView;
 
+uniform mat4 lightSpaceMatrix;
+out vec4 vsFragPosLightSpace;
+
 void main()
 {
 	gl_Position = projection * view * model * vec4(aPos, 1.0);
@@ -86,4 +89,6 @@ void main()
 	spotLightV.position = vec3(view * vec4(spotLight.position, 1.0));
 	spotLightV.direction = vec3(view * vec4(spotLight.direction, 0.0));
 	vsSpotLightView = spotLightV;
+
+	vsFragPosLightSpace = lightSpaceMatrix * model * vec4(aPos, 1.0);
 }
