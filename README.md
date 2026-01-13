@@ -12,14 +12,23 @@ vcpkg: https://vcpkg.io/en/
 
 ## Libraries
 SDL3: https://github.com/libsdl-org/SDL
+
 GSL: https://github.com/g-truc/glm
+
 OpenGL: https://www.opengl.org
+
 ImGui: https://github.com/ocornut/imgui
+
 EnTT: https://github.com/skypjack/entt
+
 Box2d: https://box2d.org
+
 ENet: http://enet.bespin.org
+
 CPR: https://github.com/libcpr/cpr
+
 ONNX Runtime: https://aiinfra.visualstudio.com/PublicPackages/_artifacts/feed/ORT-Nightly
+
 spdlog: https://github.com/gabime/spdlog
 
 ## Sources and learning materials
