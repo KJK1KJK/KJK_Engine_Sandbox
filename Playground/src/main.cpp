@@ -25,9 +25,9 @@ void changeShader(GLint shaderIndex);
 void recreateFramebuffers();
 
 //Render example scene
-void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, bool isShadow = false);
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, int shadowType = 0);
 //Render space scene
-void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, bool isShadow = false);
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, int shadowType = 0);
 
 //Global variables
 int SCREEN_WIDTH{ 800 };
@@ -56,7 +56,7 @@ GLuint gMultisampleFBOTexture{ 0 };
 //Multisample renderbuffer object for depth and stencil attachments
 GLuint gMultisampleRBO{ 0 };
 
-//Shadow map frmamebuffer object ID
+//Shadow map framebuffer object ID
 GLuint gShadowMapFBO{ 0 };
 //Shadow map texture ID
 GLuint gShadowMapTexture{ 0 };
@@ -65,8 +65,15 @@ const GLuint SHADOW_WIDTH{ 4096 };
 const GLuint SHADOW_HEIGHT{ 4096 };
 glm::mat4 gLightSpaceMatrix;
 
+//Shadow map framebuffer object ID for a point light
+GLuint gPointLightShadowMapFBO{ 0 };
+//Shadow map cube map texture ID for a point light
+GLuint gPointLightShadowMapCubeTexture{ 0 };
+//Shadow map far plane for point light
+float gPointLightShadowFarPlane{ 25.0f };
+
 //Shader program IDs
-std::optional<std::array<Shader, 16>> gShaders;
+std::optional<std::array<Shader, 20>> gShaders;
 //Current shader index
 GLint gCurrentShaderIndex{ 0 };
 
@@ -172,7 +179,7 @@ int main(int argc, char* args[])
 			//Flashlight on/off setting
 			bool flashlightEnabled = false;
 
-			//Highligh outline effect settings
+			//Highlight outline effect settings
 			bool outlineEffectEnabled = false;
 
 			//Postprocessing effect settings
@@ -185,7 +192,7 @@ int main(int argc, char* args[])
 			bool showDepthMap = false;
 
 			//Current selected scene setting
-			int currentScene = 0;
+			int currentScene = 1;
 
 			//Initialize time value
 			float timeValue = 0.0f;
@@ -378,7 +385,7 @@ int main(int argc, char* args[])
 				//Clear the depth buffer
 				glClear(GL_DEPTH_BUFFER_BIT);
 
-				//Declare the vawribale for orthogonal sizing
+				//Declare the variable for orthogonal sizing
 				float orthogonalSize = 0;
 				//Render the scene to the shadow map
 				switch (currentScene)
@@ -416,18 +423,95 @@ int main(int argc, char* args[])
 				switch (currentScene)
 				{
 				case 0:
-					renderSpaceScene(timeValue, lightView, lightProjection, true);
+					renderSpaceScene(timeValue, lightView, lightProjection, 1);
 					break;
 				case 1:
 					//Enable front face culling to reduce shadow acne
 					glEnable(GL_CULL_FACE);
 					glCullFace(GL_FRONT);
 
-					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, true);
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, 1);
 					break;
 				default:
-					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, true);
+					renderExampleScene(timeValue, showNormals, outlineEffectEnabled, lightView, lightProjection, 1);
 					break;
+				}
+
+				//Bind the point light shadow map framebuffer
+				glBindFramebuffer(GL_FRAMEBUFFER, gPointLightShadowMapFBO);
+
+				//Disable face culling
+				glDisable(GL_CULL_FACE);
+
+				//Clear the depth buffer
+				glClear(GL_DEPTH_BUFFER_BIT);
+
+				//Define a point light projection matrix
+				glm::mat4 pointLightProjection = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, 0.1f, gPointLightShadowFarPlane);
+				//Define the point light view matrices for each cube map face
+				std::vector<glm::mat4> pointLightViews;
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)));
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)));
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3 (0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)));
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)));
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)));
+				pointLightViews.push_back(glm::lookAt(gPointLights[0].position, gPointLights[0].position + glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f)));
+
+				//Update the projection matrix in the UBO
+				glBindBuffer(GL_UNIFORM_BUFFER, gMatricesUBO);
+				glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(pointLightProjection));
+				glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+				//Calculate and store the point light projection-view matrices
+				std::vector<glm::mat4> pointLightProjectionViews;
+				for (GLuint i = 0; i < 6; i++)
+				{
+					pointLightProjectionViews.push_back(pointLightProjection * pointLightViews[i]);
+				}
+
+				//Set uniforms for all point light shadow shaders
+				for(int i : {16, 17, 18, 19})
+				{
+					//Set the point light projection matrix uniform
+					changeShader(i);
+
+					//Set the far plane and light position uniforms
+					(*gShaders)[gCurrentShaderIndex].SetFloat("far_plane", gPointLightShadowFarPlane);
+					(*gShaders)[gCurrentShaderIndex].SetVec3("lightPos", gPointLights[0].position);
+
+					//Set the point light projection-view matrices uniforms
+					for (GLuint j = 0; j < 6; j++)
+					{
+						std::string uniformName = "shadowMatrices[" + std::to_string(j) + "]";
+						(*gShaders)[gCurrentShaderIndex].SetMat4(uniformName, pointLightProjectionViews[j]);
+					}
+
+					//For the exploding point shader, set the views uniform
+					if (i == 18)
+					{
+						for (GLuint j = 0; j < 6; j++)
+						{
+							std::string uniformName = "views[" + std::to_string(j) + "]";
+							(*gShaders)[gCurrentShaderIndex].SetMat4(uniformName, pointLightViews[j]);
+						}
+					}
+				}
+
+				//Change to a simple point light depth shader
+				changeShader(16);
+
+				//Render the scene to the point light shadow map
+				switch (currentScene)
+				{
+					case 0:
+						renderSpaceScene(timeValue, pointLightViews[0], pointLightProjection, 2);
+						break;
+					case 1:
+						renderExampleScene(timeValue, showNormals, outlineEffectEnabled, pointLightViews[0], pointLightProjection, 2);
+						break;
+					default:
+						renderExampleScene(timeValue, showNormals, outlineEffectEnabled, pointLightViews[0], pointLightProjection, 2);
+						break;
 				}
 
 				//Enable back face culling
@@ -754,6 +838,38 @@ bool initGL()
 		success = false;
 	}
 
+	//Create the point light shadow map framebuffer
+	glGenFramebuffers(1, &gPointLightShadowMapFBO);
+	//Bind the point light shadow map framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, gPointLightShadowMapFBO);
+
+	//Create the point light shadow map cube map texture
+	glGenTextures(1, &gPointLightShadowMapCubeTexture);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, gPointLightShadowMapCubeTexture);
+	for (GLuint i = 0; i < 6; ++i)
+	{
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	//Attach the cube map texture to the point light shadow map framebuffer
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, gPointLightShadowMapCubeTexture, 0);
+	//Disable color buffer writes
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	//Check if the point light shadow map framebuffer is complete
+	framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+	{
+		KJK_ERROR("Point light shadow map framebuffer is not complete: {0}!", framebufferStatus);
+		success = false;
+	}
+
 	//Unbind the shadow map framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -788,9 +904,9 @@ bool initGL()
 
 	//Define the directional light properties
 	gDirectionalLight.position = glm::vec3(-20.0f, 40.0f, -10.0f);
-	gDirectionalLight.ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
-	gDirectionalLight.diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-	gDirectionalLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	gDirectionalLight.ambient = glm::vec4(0.05f, 0.05f, 0.05f, 1.0f);
+	gDirectionalLight.diffuse = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
+	gDirectionalLight.specular = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
 
 	//Define the spotlight properties
 	gSpotLight.position = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -799,10 +915,10 @@ bool initGL()
 	gSpotLight.specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	//Define the point lights properties
-	gPointLights[0].position = glm::vec3(1000.0f, 1000.5f, 1000.0f);
-	gPointLights[0].ambient = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
-	gPointLights[0].diffuse = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-	gPointLights[0].specular = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	gPointLights[0].position = glm::vec3(1.0f, 0.00001f, 1.0f);
+	gPointLights[0].ambient = glm::vec4(0.05f, 0.0f, 0.0f, 1.0f);
+	gPointLights[0].diffuse = glm::vec4(0.8f, 0.0f, 0.0f, 1.0f);
+	gPointLights[0].specular = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	KJK_INFO("Initialized OpenGL!");
 
@@ -816,7 +932,7 @@ bool loadMedia()
 	bool success = true;
 
 	//Create the shaders
-	gShaders.emplace(std::array<Shader, 16>
+	gShaders.emplace(std::array<Shader, 20>
 	{
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/FrameBufferShader.frag"),
 		Shader("assets/shaders/shader.vert", "assets/shaders/shader2.frag"),
@@ -831,9 +947,13 @@ bool loadMedia()
 		Shader("assets/shaders/InstanceShader.vert", "assets/shaders/InstanceShader.frag"),
 		Shader("assets/shaders/simpleDepthShader.vert", "assets/shaders/simpleDepthShader.frag"),
 		Shader("assets/shaders/FrameBufferShader.vert", "assets/shaders/DepthMapShader.frag"),
-		Shader("assets/shaders/instancedDepthShader.vert", "assets/shaders/instancedDepthShader.frag"),
+		Shader("assets/shaders/instancedDepthShader.vert", "assets/shaders/simpleDepthShader.frag"),
 		Shader("assets/shaders/simpleDepthShader.vert", "assets/shaders/transparentDepthShader.frag"),
-		Shader("assets/shaders/explodingDepthShader.vert", "assets/shaders/explodingDepthShader.geom", "assets/shaders/simpleDepthShader.frag")
+		Shader("assets/shaders/explodingDepthShader.vert", "assets/shaders/explodingDepthShader.geom", "assets/shaders/simpleDepthShader.frag"),
+		Shader("assets/shaders/simplePointDepthShader.vert", "assets/shaders/simplePointDepthShader.geom", "assets/shaders/simplePointDepthShader.frag"),
+		Shader("assets/shaders/simplePointDepthShader.vert", "assets/shaders/simplePointDepthShader.geom", "assets/shaders/transparentPointDepthShader.frag"),
+		Shader("assets/shaders/explodingPointDepthShader.vert", "assets/shaders/explodingPointDepthShader.geom", "assets/shaders/simplePointDepthShader.frag"),
+		Shader("assets/shaders/instancedPointDepthShader.vert", "assets/shaders/simplePointDepthShader.geom", "assets/shaders/simpleDepthShader.frag"),
 	});
 
 	//Load two cube models
@@ -865,11 +985,11 @@ bool loadMedia()
 		PlaneModel("assets/blending_transparent_window.png", "assets/blending_transparent_window.png")
 	};
 	//Set the positions of the grass models
-	gGlassPlaneModels[0].setPosition(glm::vec3(-1.5f, -0.0001f, -0.48f));
-	gGlassPlaneModels[1].setPosition(glm::vec3( 1.5f, -0.0001f,  0.51f));
-	gGlassPlaneModels[2].setPosition(glm::vec3( 0.0f, -0.0001f,  0.7f));
-	gGlassPlaneModels[3].setPosition(glm::vec3(-0.3f, -0.0001f, -2.3f));
-	gGlassPlaneModels[4].setPosition(glm::vec3( 0.5f, -0.0001f, -0.6f));
+	gGlassPlaneModels[0].setPosition(glm::vec3(-1.5f, 0.0001f, -0.48f));
+	gGlassPlaneModels[1].setPosition(glm::vec3( 1.5f, 0.0001f,  0.51f));
+	gGlassPlaneModels[2].setPosition(glm::vec3( 0.0f, 0.0001f,  0.7f));
+	gGlassPlaneModels[3].setPosition(glm::vec3(-0.3f, 0.0001f, -2.3f));
+	gGlassPlaneModels[4].setPosition(glm::vec3( 0.5f, 0.0001f, -0.6f));
 	//Set the rotations of the grass models
 	for(int i = 0; i < 5; ++i)
 	{
@@ -930,7 +1050,7 @@ bool loadMedia()
 	//Load the asteroid model
 	gAsteroidModel = new Model("assets/rock/rock.obj");
 
-	//Create the array to store their posiotions
+	//Create the array to store their positions
 	gAsteroidModelMatrices = new glm::mat4[gAsteroidInstanceAmount];
 	//Initialize a random seed
 	srand(SDL_GetTicks());
@@ -938,7 +1058,7 @@ bool loadMedia()
 	float radius = 60.0f;
 	float offset = 10.0f;
 	
-	//Iterate over each instatnce to set their unique translations, scale and rotations
+	//Iterate over each instance to set their unique translations, scale and rotations
 	for (GLuint i = 0; i < gAsteroidInstanceAmount; i++)
 	{
 		//Initialize the model matrix
@@ -1030,7 +1150,7 @@ bool loadMedia()
 		(*gShaders)[gCurrentShaderIndex].SetFloat("spotLight.quadratic", 0.017f);
 
 		//Set color uniforms for the directional light
-		(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
+		(*gShaders)[gCurrentShaderIndex].SetVec3("dirLight.direction", glm::vec3(0.0f) - gDirectionalLight.position);
 		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.ambient", gDirectionalLight.ambient);
 		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.diffuse", gDirectionalLight.diffuse);
 		(*gShaders)[gCurrentShaderIndex].SetVec4("dirLight.specular", gDirectionalLight.specular);
@@ -1045,8 +1165,14 @@ bool loadMedia()
 		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].linear", 0.14f);
 		(*gShaders)[gCurrentShaderIndex].SetFloat("pointLights[0].quadratic", 0.07f);
 
+		//Set point light world position uniform
+		(*gShaders)[gCurrentShaderIndex].SetVec3("pointLightsWorld[0].position", gPointLights[0].position);
+
 		//Set material shininess
 		(*gShaders)[gCurrentShaderIndex].SetFloat("material.shininess", 32.0f);
+
+		//Set the far plane distance for point light shadow mapping
+		(*gShaders)[gCurrentShaderIndex].SetFloat("far_plane", gPointLightShadowFarPlane);
 	}
 
 	//Change to the framebuffer shader and set the texture uniform
@@ -1113,6 +1239,17 @@ void close()
 	//Delete the asteroid instance VBO
 	glDeleteBuffers(1, &gAsteroidInstanceVBO);
 
+	//Delete the shadow map texture and framebuffer
+	glDeleteTextures(1, &gShadowMapTexture);
+	glDeleteFramebuffers(1, &gShadowMapFBO);
+
+	//Delete the cube shadow map texture and framebuffer
+	glDeleteTextures(1, &gPointLightShadowMapCubeTexture);
+	glDeleteFramebuffers(1, &gPointLightShadowMapFBO);
+
+	//Delete the UBO for matrices
+	glDeleteBuffers(1, &gMatricesUBO);
+
 	//Destroy window
 	if (gWindow != nullptr)
 	{
@@ -1163,9 +1300,9 @@ void recreateFramebuffers()
 }
 
 //Render an example scene that showcases many OpenGL techniques.
-void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, bool isShadow)
+void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEnabled, glm::mat4 view, glm::mat4 projection, int shadowType)
 {
-	if(!isShadow)
+	if(shadowType == 0)
 	{
 		//Enable the shader for the model
 		changeShader(1);
@@ -1175,8 +1312,17 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
 		//Load the shadow map texture uniform
 		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
-		//Load the light space natrix uniform
+		//Load the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Bind the point light shadow map cube texture
+		glActiveTexture(GL_TEXTURE26);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, gPointLightShadowMapCubeTexture);
+		//Load the point light shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMapPoint", 26);
+
+		//Set the far plane distance uniform
+		(*gShaders)[gCurrentShaderIndex].SetFloat("far_plane", gPointLightShadowFarPlane);
 
 		//Update the spotlight position and direction uniforms
 		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
@@ -1189,7 +1335,7 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Render the plane
 	gPlaneModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Setup the stencil buffer operations for writing
 		glStencilFunc(GL_ALWAYS, 1, 0xFF);
@@ -1205,7 +1351,7 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Disable face culling
 	glDisable(GL_CULL_FACE);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Disable writing to the stencil buffer
 		glStencilMask(0x00);
@@ -1218,20 +1364,31 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
 		//Load the shadow map texture uniform
 		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
-		//Load the light space natrix uniform
+		//Load the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Bind the point light shadow map cube texture
+		glActiveTexture(GL_TEXTURE26);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, gPointLightShadowMapCubeTexture);
+		//Load the point light shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMapPoint", 26);
 
 		//Update the spotlight position and direction uniforms
 		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
 		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.direction", gCamera->direction);
 	}
-	else
+	else if (shadowType == 1)
 	{
-		//Switch to the instanced depth shader
+		//Switch to the exploding depth shader
 		changeShader(15);
 
 		//Set the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
+	else if (shadowType == 2)
+	{
+		//Switch to the exploding point depth shader
+		changeShader(18);
 	}
 
 	//Set the time uniform
@@ -1248,7 +1405,7 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Render the detailed model
 	gModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		if (showNormals)
 		{
@@ -1264,10 +1421,15 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 		//Change the shader for the reflective cube
 		changeShader(6);
 	}
-	else
+	else if (shadowType == 1)
 	{
 		//Switch to the simple depth shader
 		changeShader(11);
+	}
+	else if (shadowType == 2)
+	{
+		//Switch to the simple point depth shader
+		changeShader(16);
 	}
 
 	//Re-enable face culling
@@ -1276,7 +1438,7 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Render the reflective cube
 	gReflectiveCubeModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Change the shader for the refractive cube
 		changeShader(7);
@@ -1288,11 +1450,11 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Disable face culling
 	glDisable(GL_CULL_FACE);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Change the depth function to allow skybox depth values to pass
 		glDepthFunc(GL_LEQUAL);
-		//Disbale writng to the depth buffer
+		//Disable writing to the depth buffer
 		glDepthMask(GL_FALSE);
 
 		//Use the skybox shader
@@ -1312,13 +1474,18 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 		//Use the main shader
 		changeShader(1);
 	}
-	else
+	else if (shadowType == 1)
 	{
-		//Switch to the instanced depth shader
+		//Switch to the transparent depth shader
 		changeShader(14);
 
 		//Set the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
+	else if (shadowType == 2)
+	{
+		//Switch to the transparent point depth shader
+		changeShader(17);
 	}
 
 	//Create a sorted map of the glass planes based on distance from the camera
@@ -1338,7 +1505,7 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	//Re-enable face culling
 	glEnable(GL_CULL_FACE);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Re-enable writing to the depth buffer
 		glDepthMask(GL_TRUE);
@@ -1386,9 +1553,9 @@ void renderExampleScene(float timeValue, bool showNormals, bool outlineEffectEna
 	}
 }
 
-void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, bool isShadow)
+void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, int shadowType)
 {
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Enable the default shader
 		changeShader(1);
@@ -1402,8 +1569,14 @@ void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, boo
 		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
 		//Load the shadow map texture uniform
 		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
-		//Load the light space natrix uniform
+		//Load the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Bind the point light shadow map cube texture
+		glActiveTexture(GL_TEXTURE26);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, gPointLightShadowMapCubeTexture);
+		//Load the point light shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMapPoint", 26);
 
 		//Update the spotlight position and direction uniforms
 		(*gShaders)[gCurrentShaderIndex].SetVec3("spotLight.position", gCamera->position);
@@ -1422,7 +1595,7 @@ void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, boo
 	//Render the planet model
 	gPlanetModel->Draw((*gShaders)[gCurrentShaderIndex]);
 
-	if (!isShadow)
+	if (shadowType == 0)
 	{
 		//Switch to the instance shader
 		changeShader(10);
@@ -1436,16 +1609,27 @@ void renderSpaceScene(float timeValue, glm::mat4 view, glm::mat4 projection, boo
 		glBindTexture(GL_TEXTURE_2D, gShadowMapTexture);
 		//Load the shadow map texture uniform
 		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMap", 25);
-		//Load the light space natrix uniform
+		//Load the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+
+		//Bind the point light shadow map cube texture
+		glActiveTexture(GL_TEXTURE26);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, gPointLightShadowMapCubeTexture);
+		//Load the point light shadow map texture uniform
+		(*gShaders)[gCurrentShaderIndex].SetInt("shadowMapPoint", 26);
 	}
-	else
+	else if (shadowType == 1)
 	{
 		//Switch to the instanced depth shader
 		changeShader(13);
 
 		//Set the light space matrix uniform
 		(*gShaders)[gCurrentShaderIndex].SetMat4("lightSpaceMatrix", gLightSpaceMatrix);
+	}
+	else if (shadowType == 2)
+	{
+		//Switch to the instanced point depth shader
+		changeShader(19);
 	}
 
 	//Draw the asteroids using instanced rendering

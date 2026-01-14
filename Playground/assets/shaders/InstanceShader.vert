@@ -8,6 +8,7 @@ layout (location = 3) in mat4 instanceMatrix;
 out vec3 fragPos;
 out vec3 normal;
 out vec2 texCoords;
+out vec3 fragPosWorld;
 
 uniform float textureScale;
 
@@ -90,4 +91,5 @@ void main()
 	spotLightView = spotLightV;
 
 	fragPosLightSpace = lightSpaceMatrix * instanceMatrix * vec4(aPos, 1.0);
+	fragPosWorld = vec3(instanceMatrix * vec4(aPos, 1.0));
 }

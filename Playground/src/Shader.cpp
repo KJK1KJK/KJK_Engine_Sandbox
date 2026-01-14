@@ -248,7 +248,7 @@ GLuint Shader::loadAndCompileShader(const GLchar* shaderPath, GLenum type)
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &shaderCompiled);
 	if (shaderCompiled != GL_TRUE)
 	{
-		KJK_ERROR("Unable to compile the shader {0}!", shader);
+		KJK_ERROR("Unable to compile the shader {0} - {1}!", shader, shaderPath);
 		PrintShaderLog(shader);
 	}
 

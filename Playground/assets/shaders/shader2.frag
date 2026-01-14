@@ -42,6 +42,7 @@ struct PointLight
 };
 #define NR_POINT_LIGHTS 1
 in PointLight pointLightsView[NR_POINT_LIGHTS];
+uniform PointLight pointLightsWorld[NR_POINT_LIGHTS];
 vec4 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
 struct SpotLight
@@ -64,11 +65,16 @@ in SpotLight spotLightView;
 vec4 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
 in vec4 fragPosLightSpace;
+in vec3 fragPosWorld;
 uniform sampler2D shadowMap;
+
+uniform samplerCube shadowMapPoint;
+uniform float far_plane;
 
 vec4 sampleDiffuse();
 vec4 sampleSpecular();
 float shadowCalculations(vec4 posLightSpace);
+float pointShadowCalculations();
 
 void main()
 {
@@ -157,6 +163,11 @@ vec4 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
 	ambient *= attenuation;
 	diffuse *= attenuation;
 	specular *= attenuation;
+
+	//Apply shadow
+	float shadow = pointShadowCalculations();
+	diffuse *= (1.0 - shadow);
+	specular *= (1.0 - shadow);
 
 	//Return final result
 	return (ambient + diffuse + specular);
@@ -253,6 +264,51 @@ float shadowCalculations(vec4 posLightSpace)
 		}
 	}
 
-	//Return the shadow
-	return shadow / 9.0;
+	//Average the shadow value and return it
+	shadow /= 9.0;
+	return shadow;
+}
+
+float pointShadowCalculations()
+{
+
+	//Get the closest depth from the cubemap
+	vec3 fragToLight = fragPosWorld - pointLightsWorld[0].position;
+	float closestDepth = texture(shadowMapPoint, fragToLight).r;
+	closestDepth *= far_plane;
+
+	//Get the current depth from the light's perspective
+	float currentDepth = length(fragToLight);
+
+
+	//Offset directions
+	/*vec3 sampleOffsetDirections[20] = vec3[]
+	(
+		vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
+		vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+		vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+		vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+		vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+	);*/
+
+	//Check whether current frag pos is in shadow
+	/*float shadow = 0.0;
+	float bias = max(0.05 * (1.0 - dot(normalize(normal), normalize(pointLightsWorld[0].position - fragPos))), 0.005);
+	float currentDepthNorm = currentDepth / far_plane;
+	float biasNorm = bias / far_plane;
+	float samples = 20;
+	float viewDistance = length(fragPosWorld - pointLightsWorld[0].position);
+	float diskRadius = (1.0 + (viewDistance / far_plane)) / 25.0;
+	for (int i = 0; i < samples; ++i)
+	{
+		float closestDepthSample = texture(shadowMapPoint, fragToLight + sampleOffsetDirections[i] * diskRadius).r;
+		if (currentDepthNorm - biasNorm > closestDepthSample)
+			shadow += 1.0;
+	}*/
+
+	float bias = 0.5; 
+	return currentDepth -  bias > closestDepth ? 1.0 : 0.0;
+
+	//return the shadow value
+	//return shadow / float(samples);
 }

@@ -7,6 +7,7 @@ layout (location = 2) in vec2 aTexCoords;
 out vec3 fragPos;
 out vec3 normal;
 out vec2 texCoords;
+out vec3 fragPosWorld;
 
 uniform float textureScale;
 
@@ -90,4 +91,5 @@ void main()
 	spotLightView = spotLightV;
 
 	fragPosLightSpace = lightSpaceMatrix * model * vec4(aPos, 1.0);
+	fragPosWorld = vec3(model * vec4(aPos, 1.0));
 }

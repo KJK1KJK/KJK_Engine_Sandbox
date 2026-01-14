@@ -60,12 +60,14 @@ out DirLight dirLightView;
 out PointLight pointLightsView[NR_POINT_LIGHTS];
 out SpotLight spotLightView;
 
-
 in VS_OUT {
 	vec2 texCoords;
 } gs_in[];
 
 out vec2 texCoords;
+
+in vec3 vsFragPosWorld[];
+out vec3 fragPosWorld;
 
 uniform float time;
 
@@ -95,6 +97,7 @@ void main()
 		fragPosLightSpace = lightSpaceMatrix * explodedPos;
 		gl_Position = projection * explodedPos;
 		texCoords = gs_in[i].texCoords;
+		fragPosWorld = vsFragPosWorld[i];
 		EmitVertex();
 	}
 	EndPrimitive();

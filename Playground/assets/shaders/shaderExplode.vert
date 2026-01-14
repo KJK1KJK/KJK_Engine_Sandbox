@@ -10,6 +10,7 @@ out VS_OUT
 {
 	vec2 texCoords;
 } vs_out;
+out vec3 vsFragPosWorld;
 
 layout (std140, binding = 0) uniform Matrices
 {
@@ -91,4 +92,5 @@ void main()
 	vsSpotLightView = spotLightV;
 
 	vsFragPosLightSpace = lightSpaceMatrix * model * vec4(aPos, 1.0);
+	vsFragPosWorld = vec3(model * vec4(aPos, 1.0));
 }
